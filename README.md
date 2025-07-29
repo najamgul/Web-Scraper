@@ -4,7 +4,7 @@ A final year project
 
 ## 📌 Project Overview
 
-This project is an advanced web scraper designed to extract **text-based information** from various online sources using **Python** and **AI/ML technologies**. Unlike traditional scrapers, this tool intelligently filters and prioritizes relevant content based on user input and context. It continuously improves over time through machine learning, providing a smarter and more efficient data extraction solution.
+This project is an advanced web scraper designed to extract **text-based and image based information** from various online sources using **Python** and **AI/ML technologies**. Unlike traditional scrapers, this tool intelligently filters and prioritizes relevant content based on user input and context. It continuously improves over time through machine learning, providing a smarter and more efficient data extraction solution.
 
 ## 🎯 Key Features
 
