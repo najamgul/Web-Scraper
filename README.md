@@ -1,6 +1,6 @@
 # Web-Scraper
 A final year project 
-# 🕸️ AI-Powered Web Scraper for Threat Intelligence & Data Extraction
+# Web Scraper for Threat Intelligence & Data Extraction
 
 ## 📌 Project Overview
 
