@@ -1,0 +1,14 @@
+body {
+    font-family: Arial;
+    background-color: #f7f7f7;
+    padding: 20px;
+}
+.container {
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+}
+input[type="text"] {
+    width: 60%;
+    padding: 10px;
+}

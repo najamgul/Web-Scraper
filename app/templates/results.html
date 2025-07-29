@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Results for: {{ results.input }}</h2>
+<p>Type: {{ results.type }}</p>
+
+{% if results.vt %}
+    <h3>VirusTotal</h3>
+    <pre>{{ results.vt | tojson(indent=2) }}</pre>
+{% endif %}
+
+{% if results.shodan %}
+    <h3>Shodan</h3>
+    <pre>{{ results.shodan | tojson(indent=2) }}</pre>
+{% endif %}
+
+{% if results.scraped_data %}
+    <h3>Scraped Data</h3>
+    {% for data in results.scraped_data %}
+        <pre>{{ data }}</pre>
+    {% endfor %}
+{% endif %}
+
+<h3>Prediction: <strong>{{ results.prediction }}</strong></h3>
+<a href="{{ url_for('main.index') }}">Try another</a>
+{% endblock %}
