@@ -1,25 +1,93 @@
 {% extends 'base.html' %}
+
 {% block content %}
-<h2>Results for: {{ results.input }}</h2>
-<p>Type: {{ results.type }}</p>
+<div class="container">
+    <div class="results-section">
+        <h2>Results for: {{ results.input }}</h2>
+        <p>Type: {{ results.type }}</p>
+        
+        {% if error %}
+            <div class="error-message">
+                <p>{{ error }}</p>
+            </div>
+        {% endif %}
+        
+        {% if results.prediction != "Unknown" %}
+            <div class="prediction">
+                <h3>Threat Prediction</h3>
+                <p class="prediction-{{ results.prediction|lower }}">{{ results.prediction }}</p>
+            </div>
+        {% endif %}
+        
+        {% if results.scraped_data %}
+            <div class="scraped-results">
+                <h3>Scraped Data from {{ results.scraped_data|length }} Sources</h3>
+                {% for item in results.scraped_data %}
+                    <div class="scraped-item">
+                        <h4><a href="{{ item.url }}" target="_blank">{{ item.url }}</a></h4>
+                        <div class="content-box">
+                            <p>{{ item.content }}</p>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+        
+        {% if results.vt %}
+            <div class="virustotal-results">
+                <h3>VirusTotal Results</h3>
+                <div class="vt-summary">
+                    <p>Malicious: {{ results.vt.malicious }}</p>
+                    <p>Suspicious: {{ results.vt.suspicious }}</p>
+                    <p>Undetected: {{ results.vt.undetected }}</p>
+                </div>
+            </div>
+        {% endif %}
+        
+        {% if results.shodan %}
+            <div class="shodan-results">
+                <h3>Shodan Results</h3>
+                <div class="shodan-summary">
+                    <p>IP: {{ results.shodan.ip }}</p>
+                    <p>Ports: {{ results.shodan.ports|join(', ') }}</p>
+                    <p>Vulnerabilities: {{ results.shodan.vulns|length }}</p>
+                </div>
+            </div>
+        {% endif %}
+        
+        <a href="/" class="back-button">New Search</a>
+    </div>
+</div>
 
-{% if results.vt %}
-    <h3>VirusTotal</h3>
-    <pre>{{ results.vt | tojson(indent=2) }}</pre>
-{% endif %}
-
-{% if results.shodan %}
-    <h3>Shodan</h3>
-    <pre>{{ results.shodan | tojson(indent=2) }}</pre>
-{% endif %}
-
-{% if results.scraped_data %}
-    <h3>Scraped Data</h3>
-    {% for data in results.scraped_data %}
-        <pre>{{ data }}</pre>
-    {% endfor %}
-{% endif %}
-
-<h3>Prediction: <strong>{{ results.prediction }}</strong></h3>
-<a href="{{ url_for('main.index') }}">Try another</a>
+<style>
+    /* Existing styles... */
+    
+    .prediction {
+        padding: 15px;
+        border-radius: 8px;
+        margin: 20px 0;
+        font-weight: bold;
+    }
+    
+    .prediction-malicious {
+        background-color: #4a1c1c;
+        color: #ff6b6b;
+    }
+    
+    .prediction-safe {
+        background-color: #1c4a2b;
+        color: #6bff8b;
+    }
+    
+    .prediction-suspicious {
+        background-color: #4a3f1c;
+        color: #ffdb6b;
+    }
+    
+    .vt-summary, .shodan-summary {
+        padding: 15px;
+        background-color: #262c3d;
+        border-radius: 8px;
+    }
+</style>
 {% endblock %}

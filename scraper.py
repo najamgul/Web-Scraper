@@ -11,7 +11,7 @@ def scrape_data():
     # Setup Chrome driver
     chrome_options = Options()
     chrome_options.add_argument("--headless")
-    chrome_driver_path = r"C:\Users\ANAGHA\Downloads\chromedriver-win64\chromedriver.exe"
+    chrome_driver_path = r"D:\chromedriver-win64\chromedriver.exe"
     service = Service(executable_path=chrome_driver_path)
     driver = webdriver.Chrome(service=service, options=chrome_options)
 

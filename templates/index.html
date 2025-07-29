@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Threat Intelligence Dashboard</title>
   <style>
     body {
@@ -125,7 +126,8 @@
       <h2>Input Data</h2>
       <form action="/scrape" method="post" enctype="multipart/form-data">
         <input type="text" name="query" placeholder="🔍 Enter keyword / domain" required>
-        <input type="file" name="image" accept="image/*">
+        <label for="image-upload" style="display:block; margin-bottom:8px; color:#a179ff;">Upload Image (optional):</label>
+        <input type="file" id="image-upload" name="image" accept="image/*" title="Upload an image file" placeholder="Choose an image file">
         <button type="submit">Start Scraping</button>
       </form>
     </div>
