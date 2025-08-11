@@ -1,4 +1,4 @@
-#!C:\Users\Dnyanesh\web_scraper\venv\Scripts\python.exe
+#!C:\Users\Dnyanesh\Web-Scraper\venv\Scripts\python.exe
 
 ##############################################################################
 #
