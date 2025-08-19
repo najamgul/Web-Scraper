@@ -8,188 +8,189 @@ import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
-# Selenium imports
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-
-# Import VT and Shodan lookups from vt_shodan_api
 from app.vt_shodan_api import vt_lookup_domain, vt_lookup_ip, vt_lookup_url, shodan_lookup
 
 load_dotenv()
 
-# Configuration
+# -------------------------
+# CONFIG
+# -------------------------
 REQUEST_TIMEOUT = 12
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115 Safari/537.36"
 )
-
 HEADERS = {"User-Agent": USER_AGENT}
+
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.INFO)
 
-# ---------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------
-IP_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+IP_RE = re.compile(r"^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$")
 URL_RE = re.compile(r"https?://[^\s/$.?#].[^\s]*", re.IGNORECASE)
 HASH_RE = re.compile(r"\b[a-fA-F0-9]{32,64}\b")
 
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+GOOGLE_CSE_ID = os.getenv("GOOGLE_CSE_ID")
 
+# -------------------------
+# HELPER FUNCTIONS
+# -------------------------
 def is_ip(s: str) -> bool:
     return bool(IP_RE.fullmatch(s))
-
 
 def is_url(s: str) -> bool:
     return bool(re.match(r"^https?://", s, re.IGNORECASE))
 
+def is_hash(s: str) -> bool:
+    return bool(HASH_RE.fullmatch(s))
 
 def extract_iocs(text: str) -> Dict[str, List[str]]:
-    """Return unique lists of URLs, IPs, and hashes found in text."""
-    urls = list({m.group(0) for m in URL_RE.finditer(text)})
-    ips = list({m.group(0) for m in IP_RE.finditer(text)})
-    hashes = list({m.group(0) for m in HASH_RE.finditer(text)})
+    urls = list({m.group(0) for m in URL_RE.finditer(text or "")})
+    ips = list({m.group(0) for m in IP_RE.finditer(text or "")})
+    hashes = list({m.group(0) for m in HASH_RE.finditer(text or "")})
     return {"urls": urls, "ips": ips, "hashes": hashes}
 
-
-# ---------------------------------------------------------------------
-# Google dorking
-# ---------------------------------------------------------------------
-def google_dork_search(keyword: str, num_results: int = 5, pause: float = 1.0) -> List[Dict]:
-    query = f'site:* "{keyword}"'
-    q = requests.utils.quote(query)
-    search_url = f"https://www.google.com/search?q={q}&num={num_results}"
+def safe_get(url: str, params=None, headers=None) -> requests.Response:
+    """Wrapper for requests.get with logging and timeout"""
     try:
-        resp = requests.get(search_url, headers=HEADERS, timeout=REQUEST_TIMEOUT)
+        resp = requests.get(url, params=params, headers=headers or HEADERS, timeout=REQUEST_TIMEOUT)
         resp.raise_for_status()
-    except Exception as e:
-        LOGGER.warning("Google search request failed: %s", e)
+        return resp
+    except requests.RequestException as e:
+        LOGGER.warning("Request failed for %s: %s", url, e)
+        return None
+
+# -------------------------
+# GOOGLE CSE SEARCH
+# -------------------------
+def google_cse_search(query: str, num_results: int = 5) -> List[Dict]:
+    if not GOOGLE_API_KEY or not GOOGLE_CSE_ID:
+        LOGGER.warning("Google API Key or CSE ID not set")
         return []
 
-    soup = BeautifulSoup(resp.text, "html.parser")
-    results = []
-    items = soup.select("div.tF2Cxc") or soup.select("div.g")
-    for g in items[:num_results]:
-        a = g.find("a")
-        title_tag = g.find("h3")
-        snippet_tag = g.select_one(".VwiC3b") or g.find("span.aCOpRe")
-        url = a.get("href") if a else None
-        title = title_tag.get_text(strip=True) if title_tag else url or "No title"
-        snippet = snippet_tag.get_text(strip=True) if snippet_tag else ""
-        if url:
-            results.append({"title": title, "url": url, "snippet": snippet})
-    time.sleep(pause)
+    url = "https://www.googleapis.com/customsearch/v1"
+    params = {
+        "key": GOOGLE_API_KEY,
+        "cx": GOOGLE_CSE_ID,
+        "q": query,
+        "num": num_results,
+    }
+
+    resp = safe_get(url, params=params)
+    results: List[Dict] = []
+    if resp:
+        data = resp.json()
+        for item in data.get("items", []):
+            results.append({
+                "title": item.get("title"),
+                "url": item.get("link"),
+                "snippet": item.get("snippet", "")
+            })
     return results
 
-
-# ---------------------------------------------------------------------
-# Static scraping
-# ---------------------------------------------------------------------
+# -------------------------
+# STATIC SCRAPER
+# -------------------------
 def scrape_static_page(url: str, max_chars: int = 3000) -> Dict:
-    try:
-        resp = requests.get(url, headers=HEADERS, timeout=REQUEST_TIMEOUT)
-        resp.raise_for_status()
-        soup = BeautifulSoup(resp.text, "html.parser")
-        for t in soup(["script", "style", "noscript"]):
-            t.decompose()
-        text = " ".join(soup.stripped_strings)
-        iocs = extract_iocs(text)
-        return {"url": url, "text": text[:max_chars], "iocs": iocs}
-    except Exception as e:
-        LOGGER.warning("Static scrape failed for %s: %s", url, e)
-        return {"url": url, "error": str(e), "text": "", "iocs": {"urls": [], "ips": [], "hashes": []}}
+    resp = safe_get(url)
+    if not resp:
+        return {"url": url, "text": "", "iocs": {"urls": [], "ips": [], "hashes": []},
+                "status": "failed", "reason": "Request failed"}
+    
+    soup = BeautifulSoup(resp.text, "html.parser")
+    for t in soup(["script", "style", "noscript"]):
+        t.decompose()
+    text = " ".join(soup.stripped_strings)
+    return {"url": url, "text": text[:max_chars], "iocs": extract_iocs(text), "status": "success", "reason": ""}
 
+# -------------------------
+# OTX SCRAPER
+# -------------------------
+def scrape_otx_indicator(indicator: str, indicator_type: str) -> List[Dict]:
+    url = f"https://otx.alienvault.com/api/v1/indicators/{indicator_type}/{indicator}/general"
+    resp = safe_get(url)
+    if not resp:
+        return []
 
-# ---------------------------------------------------------------------
-# Dynamic scraping
-# ---------------------------------------------------------------------
-def _create_headless_driver():
-    chrome_options = Options()
-    chrome_options.add_argument("--headless=new")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument(f"user-agent={USER_AGENT}")
-    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-    return webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+    data = resp.json()
+    pulses = data.get("pulse_info", {}).get("pulses", [])
+    return [{"title": p.get("name") or "Pulse", "context": p.get("description") or ""} for p in pulses]
 
+# -------------------------
+# MASTER FUNCTION
+# -------------------------
+def scrape_and_enrich(input_value: str, max_pages: int = 3, vt: bool = True, sh: bool = True) -> List[Dict]:
+    results: List[Dict] = []
 
-def scrape_dynamic_page(url: str, wait_seconds: float = 3.0, max_chars: int = 3000) -> Dict:
-    driver = None
-    try:
-        driver = _create_headless_driver()
-        driver.get(url)
-        time.sleep(wait_seconds)
-        html = driver.page_source
-        soup = BeautifulSoup(html, "html.parser")
-        for t in soup(["script", "style", "noscript"]):
-            t.decompose()
-        text = " ".join(soup.stripped_strings)
-        iocs = extract_iocs(text)
-        return {"url": url, "text": text[:max_chars], "iocs": iocs}
-    except Exception as e:
-        LOGGER.warning("Dynamic scrape failed for %s: %s", url, e)
-        return {"url": url, "error": str(e), "text": "", "iocs": {"urls": [], "ips": [], "hashes": []}}
-    finally:
-        if driver:
-            try:
-                driver.quit()
-            except Exception:
-                pass
-
-
-# ---------------------------------------------------------------------
-# Master function
-# ---------------------------------------------------------------------
-def scrape_and_enrich(keyword: str, max_pages: int = 3, dynamic: bool = False, vt: bool = True, sh: bool = True) -> List[Dict]:
-    results = []
-    google_hits = google_dork_search(keyword, num_results=max_pages)
-    for hit in google_hits:
-        url = hit.get("url")
-        title = hit.get("title")
-        snippet = hit.get("snippet")
-
-        if dynamic:
-            page = scrape_dynamic_page(url)
-        else:
-            page = scrape_static_page(url)
-
-        content = page.get("text", "")
-        iocs = page.get("iocs", {"urls": [], "ips": [], "hashes": []})
-
-        vt_info = None
-        sh_info = None
-
-        if vt:
-            try:
-                target_url = iocs["urls"][0] if iocs["urls"] else url
-                if is_url(target_url):
-                    vt_info = vt_lookup_url(target_url)
-                elif is_ip(target_url):
-                    vt_info = vt_lookup_ip(target_url)
-                else:
-                    vt_info = vt_lookup_domain(target_url)
-            except Exception as e:
-                vt_info = {"error": str(e)}
-
-        if sh and iocs.get("ips"):
-            try:
-                sh_info = shodan_lookup(iocs["ips"][0])
-            except Exception as e:
-                sh_info = {"error": str(e)}
-
+    # Case 1: IP
+    if is_ip(input_value):
+        results.extend(scrape_otx_indicator(input_value, "IPv4"))
+        vt_info = vt_lookup_ip(input_value) if vt else None
+        sh_info = shodan_lookup(input_value) if sh else None
         results.append({
-            "title": title,
-            "url": url,
-            "snippet": snippet,
-            "content": content,
-            "iocs": iocs,
-            "virustotal": vt_info,
-            "shodan": sh_info
+            "title": input_value,
+            "url": f"http://{input_value}",
+            "iocs": {},
+            "virustotal": vt_info or {},
+            "shodan": sh_info or {},
+            "status": "success",
+            "reason": ""
         })
 
-        time.sleep(1.0)
+    # Case 2: URL
+    elif is_url(input_value):
+        results.extend(scrape_otx_indicator(input_value, "url"))
+        vt_info = vt_lookup_url(input_value) if vt else None
+        results.append({
+            "title": input_value,
+            "url": input_value,
+            "iocs": {},
+            "virustotal": vt_info or {},
+            "shodan": {},
+            "status": "success",
+            "reason": ""
+        })
+        results.append(scrape_static_page(input_value))
+
+    # Case 3: Hash
+    elif is_hash(input_value):
+        results.append({
+            "title": input_value,
+            "url": None,
+            "iocs": {},
+            "virustotal": {},
+            "shodan": {},
+            "status": "not_applicable",
+            "reason": "Hash search only via ThreatFox (if implemented)"
+        })
+
+    # Case 4: Keyword
+    else:
+        search_results = google_cse_search(input_value, num_results=max_pages)
+        if not search_results:
+            results.append({
+                "title": "No results",
+                "url": None,
+                "iocs": {},
+                "virustotal": {},
+                "shodan": {},
+                "status": "failed",
+                "reason": "Google CSE returned no results"
+            })
+        else:
+            for item in search_results:
+                page = scrape_static_page(item["url"])
+                results.append({
+                    "title": item["title"],
+                    "url": item["url"],
+                    "snippet": item.get("snippet", ""),
+                    "content": page.get("text", ""),
+                    "iocs": page.get("iocs", {"urls": [], "ips": [], "hashes": []}),
+                    "virustotal": {"note": "Not applicable for keywords"},
+                    "shodan": {"note": "Not applicable for keywords"},
+                    "status": page.get("status", "success"),
+                    "reason": page.get("reason", "")
+                })
+                time.sleep(1)
 
     return results
