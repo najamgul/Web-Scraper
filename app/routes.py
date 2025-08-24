@@ -97,16 +97,15 @@ def index():
         }
 
         return render_template("results.html", results={
-            "input": user_input,
-            "type": ioc_type,
-            "vt": vt_data,
-            "shodan": shodan_data,
-            "scraped": scraped_data,
-            "classification": classification
-        }, chart_data=json.dumps(chart_data))
-
+        "ioc_id": ioc_result.id,  # ✅ auto-generate a stable ID
+        "input": user_input,
+        "type": ioc_type,
+        "vt": vt_data,
+        "shodan": shodan_data,
+        "scraped": scraped_data,
+        "classification": classification
+    }, chart_data=json.dumps(chart_data))
     return render_template("index.html", form=form)
-
 
 @main_bp.route("/feedback/<int:ioc_id>", methods=["POST"])
 def feedback(ioc_id):

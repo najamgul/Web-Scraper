@@ -1,150 +1,96 @@
 {% extends "base.html" %}
-
 {% block content %}
 <h2>Scan Results</h2>
 
-<div class="card">
-    <h3>Input: {{ results.input }}</h3>
-    <p>Type: {{ results.type }}</p>
-    <p>Classification:
-        {% set cls = (results.classification or '') %}
-        <strong style="color: {{ 'red' if cls == 'Malicious' else ('green' if cls == 'Benign' else '#ff9800') }}">
-            {{ cls }}
-        </strong>
-    </p>
+<div class="results-section">
+
+    <!-- Classification -->
+    <div class="card mb-3 p-3">
+        <h3>Classification</h3>
+        <p>{{ results.classification or "Unknown" }}</p>
+    </div>
+
+    <!-- VirusTotal -->
+    <div class="card mb-3 p-3">
+        <h3>VirusTotal</h3>
+        {% if results.vt %}
+            <pre style="white-space: pre-wrap; font-family: monospace; background:#0f172a; color:#e5e7eb; padding:12px; border-radius:8px;">
+{{ results.vt | tojson(indent=2) }}
+            </pre>
+        {% else %}
+            <p>No VirusTotal data available</p>
+        {% endif %}
+    </div>
+
+    <!-- Passive Recon -->
+    <div class="card mb-3 p-3">
+        <h3>Passive Recon</h3>
+        {% if results.passive %}
+            <pre style="white-space: pre-wrap; font-family: monospace; background:#f9fafb; padding:12px; border-radius:8px;">
+{{ results.passive }}
+            </pre>
+        {% else %}
+            <p>No passive recon data available</p>
+        {% endif %}
+    </div>
+
+    <!-- Active Recon -->
+    <div class="card mb-3 p-3">
+        <h3>Active Recon</h3>
+        {% if results.active %}
+            <pre style="white-space: pre-wrap; font-family: monospace; background:#f9fafb; padding:12px; border-radius:8px;">
+{{ results.active }}
+            </pre>
+        {% else %}
+            <p>No active recon data available</p>
+        {% endif %}
+    </div>
+
+    <!-- ✅ Scraped Data (formatted cards) -->
+    <div class="card mb-3 p-3">
+        <h3>Scraped Data</h3>
+        {% set scraped = results.scraped or [] %}
+        {% if scraped %}
+            <div class="grid gap-4">
+                {% for item in scraped %}
+                    <div class="card" style="padding:16px; border:1px solid #ddd; border-radius:8px; background:#f9fafb; margin-bottom:12px;">
+                        <h4 style="margin:0; color:#1e3a8a;">
+                            <a href="{{ item.url }}" target="_blank">{{ item.title }}</a>
+                        </h4>
+                        <p style="margin:6px 0; color:#374151;">{{ item.snippet }}</p>
+
+                        {% if item.iocs %}
+                        <details style="margin-top:8px;">
+                            <summary style="cursor:pointer;">IOCs</summary>
+                            <ul style="margin-left:16px; color:#111827;">
+                                {% if item.iocs.urls %}
+                                    <li><strong>URLs:</strong> {{ item.iocs.urls | join(", ") }}</li>
+                                {% endif %}
+                                {% if item.iocs.ips %}
+                                    <li><strong>IPs:</strong> {{ item.iocs.ips | join(", ") }}</li>
+                                {% endif %}
+                                {% if item.iocs.hashes %}
+                                    <li><strong>Hashes:</strong> {{ item.iocs.hashes | join(", ") }}</li>
+                                {% endif %}
+                            </ul>
+                        </details>
+                        {% endif %}
+
+                        {% if item.content %}
+                        <details style="margin-top:8px;">
+                            <summary style="cursor:pointer;">Full Content</summary>
+                            <pre style="max-height:200px; overflow:auto; white-space:pre-wrap; background:#0f172a; color:#e5e7eb; padding:8px; border-radius:6px;">
+{{ item.content }}
+                            </pre>
+                        </details>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p>No scraped data found</p>
+        {% endif %}
+    </div>
+
 </div>
-
-<hr>
-
-<h3>VirusTotal Report</h3>
-{% set vt = results.vt or {} %}
-{% set stats = vt.get("last_analysis_stats") or (vt.get("data", {}).get("attributes", {}).get("last_analysis_stats")) %}
-{% if stats %}
-    <ul>
-        <li><strong>Malicious:</strong> {{ stats.malicious }}</li>
-        <li><strong>Suspicious:</strong> {{ stats.suspicious }}</li>
-        <li><strong>Undetected:</strong> {{ stats.undetected }}</li>
-        <li><strong>Harmless:</strong> {{ stats.harmless }}</li>
-    </ul>
-    <details>
-        <summary>Show full VirusTotal JSON</summary>
-        <pre style="max-height:360px; overflow:auto; padding:12px; background:#0f172a; color:#e5e7eb; border-radius:8px;">
-{{ vt | tojson(indent=2) }}
-        </pre>
-    </details>
-{% else %}
-    <p>No VirusTotal data available</p>
-{% endif %}
-
-<h3>Shodan Report</h3>
-{% set shodan = results.shodan or {} %}
-{% if shodan %}
-    <ul>
-        <li><strong>IP:</strong> {{ shodan.ip_str or shodan.ip or "N/A" }}</li>
-        <li><strong>Organization:</strong> {{ shodan.org or "N/A" }}</li>
-        <li><strong>ISP:</strong> {{ shodan.isp or "N/A" }}</li>
-        <li><strong>Open Ports:</strong>
-            {% if shodan.ports %}{{ shodan.ports | join(", ") }}
-            {% elif shodan.data %}{{ shodan.data | map(attribute="port") | join(", ") }}
-            {% else %}N/A{% endif %}
-        </li>
-    </ul>
-    <details>
-        <summary>Show full Shodan JSON</summary>
-        <pre style="max-height:360px; overflow:auto; padding:12px; background:#0f172a; color:#e5e7eb; border-radius:8px;">
-{{ shodan | tojson(indent=2) }}
-        </pre>
-    </details>
-{% else %}
-    <p>No Shodan data available</p>
-{% endif %}
-
-<h3>Scraped Data</h3>
-{% set scraped = results.scraped or [] %}
-{% if scraped and not (scraped | tojson).lower().startswith('[{"title": "no scraped data found"') %}
-<pre style="max-height:360px; overflow:auto; padding:12px; background:#0f172a; color:#e5e7eb; border-radius:8px;">
-{{ scraped | tojson(indent=2) }}
-</pre>
-{% else %}
-<p>No scraped data found</p>
-{% endif %}
-
-<hr>
-
-<h3>Classification Overview (This Result)</h3>
-<div style="max-width:360px; min-height:300px;">
-    <canvas id="classificationPie"></canvas>
-</div>
-
-<h3 style="margin-top: 24px;">VirusTotal Detections</h3>
-<div style="max-width:520px; min-height:320px;">
-    <canvas id="vtBarChart"></canvas>
-</div>
-
-<h3 style="margin-top: 24px;">Overall History (All Results)</h3>
-<div style="max-width:360px; min-height:300px;">
-    <canvas id="overallPie"></canvas>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-const currentClass = {{ (results.classification or 'Unknown') | tojson }};
-const clsLabels = ['Malicious', 'Benign', 'Informational', 'Unknown'];
-const clsValues = clsLabels.map(l => l === currentClass ? 1 : 0);
-
-new Chart(document.getElementById('classificationPie'), {
-    type: 'pie',
-    data: {
-        labels: clsLabels,
-        datasets: [{
-            data: clsValues,
-            backgroundColor: ['#e74c3c', '#2ecc71', '#3498db', '#95a5a6']
-        }]
-    },
-    options: { responsive: true, maintainAspectRatio: false }
-});
-
-const vtStats = (() => {
-    try {
-        const vt = {{ (results.vt or {}) | tojson }};
-        if (vt.last_analysis_stats) return vt.last_analysis_stats;
-        if (vt.data && vt.data.attributes && vt.data.attributes.last_analysis_stats)
-            return vt.data.attributes.last_analysis_stats;
-        return {};
-    } catch (e) { return {}; }
-})();
-const vtLabels = Object.keys(vtStats);
-const vtValues = Object.values(vtStats);
-
-new Chart(document.getElementById('vtBarChart'), {
-    type: 'bar',
-    data: {
-        labels: vtLabels,
-        datasets: [{
-            label: 'VirusTotal Detection Stats',
-            data: vtValues,
-            backgroundColor: '#e67e22'
-        }]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
-    }
-});
-
-const overallData = {{ chart_data | safe }};
-new Chart(document.getElementById('overallPie'), {
-    type: 'pie',
-    data: {
-        labels: overallData.labels,
-        datasets: [{
-            data: overallData.values,
-            backgroundColor: ['#e74c3c', '#2ecc71', '#3498db', '#95a5a6']
-        }]
-    },
-    options: { responsive: true, maintainAspectRatio: false }
-});
-</script>
 {% endblock %}
