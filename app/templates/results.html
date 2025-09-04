@@ -1,150 +1,536 @@
-{% extends "base.html" %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scan Results - Threat Intelligence Scanner</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            color: #333;
+            padding: 0;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .back-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: white;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            color: #4361ee;
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+        
+        .back-btn:hover {
+            transform: translateX(-3px);
+            box-shadow: 0 6px 15px rgba(67, 97, 238, 0.2);
+        }
+        
+        h1 {
+            font-size: 2.2rem;
+            color: #2d3748;
+            font-weight: 700;
+        }
+        
+        .summary-card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+            padding: 2rem;
+            margin-bottom: 2.5rem;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+        }
+        
+        .summary-item {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .summary-label {
+            font-size: 0.9rem;
+            color: #718096;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+        
+        .summary-value {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: #2d3748;
+        }
+        
+        .classification {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.5rem 1.2rem;
+            border-radius: 100px;
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+        
+        .malicious {
+            background: rgba(231, 76, 60, 0.15);
+            color: #c0392b;
+        }
+        
+        .benign {
+            background: rgba(46, 204, 113, 0.15);
+            color: #27ae60;
+        }
+        
+        .unknown {
+            background: rgba(255, 152, 0, 0.15);
+            color: #f39c12;
+        }
+        
+        .section-title {
+            font-size: 1.5rem;
+            color: #2d3748;
+            margin: 2.5rem 0 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        
+        .section-title i {
+            color: #4361ee;
+        }
+        
+        .report-card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .stat-item {
+            text-align: center;
+            padding: 1.5rem;
+            border-radius: 12px;
+            background: #f8f9fa;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 800;
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-label {
+            font-size: 0.9rem;
+            color: #718096;
+            font-weight: 600;
+        }
+        
+        .malicious-stat {
+            color: #e74c3c;
+        }
+        
+        .suspicious-stat {
+            color: #f39c12;
+        }
+        
+        .undetected-stat {
+            color: #95a5a6;
+        }
+        
+        .harmless-stat {
+            color: #2ecc71;
+        }
+        
+        details {
+            margin-top: 1.5rem;
+        }
+        
+        summary {
+            cursor: pointer;
+            padding: 1rem;
+            background: #f8f9fa;
+            border-radius: 8px;
+            font-weight: 600;
+            color: #4361ee;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        summary::-webkit-details-marker {
+            display: none;
+        }
+        
+        summary::before {
+            content: '►';
+            font-size: 0.8rem;
+            transition: transform 0.3s ease;
+        }
+        
+        details[open] summary::before {
+            transform: rotate(90deg);
+        }
+        
+        .json-view {
+            max-height: 360px;
+            overflow: auto;
+            padding: 1.5rem;
+            background: #0f172a;
+            color: #e5e7eb;
+            border-radius: 8px;
+            margin-top: 1rem;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+        
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 2rem;
+            margin: 3rem 0;
+        }
+        
+        .chart-container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+            padding: 1.5rem;
+            height: 350px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .chart-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            color: #2d3748;
+            text-align: center;
+        }
+        
+        .chart-wrapper {
+            flex-grow: 1;
+            position: relative;
+        }
+        
+        .no-data {
+            text-align: center;
+            padding: 2rem;
+            color: #718096;
+            font-style: italic;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 1.5rem;
+            }
+            
+            .summary-card {
+                grid-template-columns: 1fr;
+            }
+            
+            .chart-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .chart-container {
+                height: 300px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <a href="{{ url_for('main.index') }}" class="back-btn">
+                <i class="fas fa-arrow-left"></i>
+            </a>
+            <h1>Scan Results</h1>
+        </header>
+        
+        <div class="summary-card">
+            <div class="summary-item">
+                <span class="summary-label">Input</span>
+                <span class="summary-value">{{ results.input }}</span>
+            </div>
+            
+            <div class="summary-item">
+                <span class="summary-label">Type</span>
+                <span class="summary-value">{{ results.type }}</span>
+            </div>
+            
+            <div class="summary-item">
+                <span class="summary-label">Classification</span>
+                {% set cls = (results.classification or 'Unknown') %}
+                <span class="summary-value">
+                    <span class="classification {{ cls.lower() }}">{{ cls }}</span>
+                </span>
+            </div>
+        </div>
+        
+        <h2 class="section-title"><i class="fas fa-shield-virus"></i> VirusTotal Report</h2>
+        
+        {% set vt = results.vt or {} %}
+        {% set stats = vt.get("last_analysis_stats") or (vt.get("data", {}).get("attributes", {}).get("last_analysis_stats")) %}
+        
+        <div class="report-card">
+            {% if stats %}
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-value malicious-stat">{{ stats.malicious }}</div>
+                    <div class="stat-label">Malicious</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value suspicious-stat">{{ stats.suspicious }}</div>
+                    <div class="stat-label">Suspicious</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value undetected-stat">{{ stats.undetected }}</div>
+                    <div class="stat-label">Undetected</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value harmless-stat">{{ stats.harmless }}</div>
+                    <div class="stat-label">Harmless</div>
+                </div>
+            </div>
+            
+            <details>
+                <summary>View full VirusTotal JSON data</summary>
+                <pre class="json-view">{{ vt | tojson(indent=2) }}</pre>
+            </details>
+            {% else %}
+            <div class="no-data">
+                <i class="fas fa-info-circle" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+                <p>No VirusTotal data available</p>
+            </div>
+            {% endif %}
+        </div>
+        
+        <h2 class="section-title"><i class="fas fa-search-location"></i> Shodan Report</h2>
+        
+        {% set shodan = results.shodan or {} %}
+        
+        <div class="report-card">
+            {% if shodan %}
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-value">{{ shodan.ip_str or shodan.ip or "N/A" }}</div>
+                    <div class="stat-label">IP Address</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">{{ shodan.org or "N/A" }}</div>
+                    <div class="stat-label">Organization</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">{{ shodan.isp or "N/A" }}</div>
+                    <div class="stat-label">ISP</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">
+                        {% if shodan.ports %}{{ shodan.ports | length }}
+                        {% elif shodan.data %}{{ shodan.data | length }}
+                        {% else %}0{% endif %}
+                    </div>
+                    <div class="stat-label">Open Ports</div>
+                </div>
+            </div>
+            
+            {% if shodan.ports or shodan.data %}
+            <div style="margin-top: 1.5rem;">
+                <strong>Open Ports:</strong>
+                <span style="font-family: monospace;">
+                    {% if shodan.ports %}{{ shodan.ports | join(", ") }}
+                    {% elif shodan.data %}{{ shodan.data | map(attribute="port") | join(", ") }}
+                    {% else %}N/A{% endif %}
+                </span>
+            </div>
+            {% endif %}
+            
+            <details>
+                <summary>View full Shodan JSON data</summary>
+                <pre class="json-view">{{ shodan | tojson(indent=2) }}</pre>
+            </details>
+            {% else %}
+            <div class="no-data">
+                <i class="fas fa-info-circle" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+                <p>No Shodan data available</p>
+            </div>
+            {% endif %}
+        </div>
+        
+        <h2 class="section-title"><i class="fas fa-database"></i> Scraped Data</h2>
+        
+        {% set scraped = results.scraped or [] %}
+        
+        <div class="report-card">
+            {% if scraped and not (scraped | tojson).lower().startswith('[{"title": "no scraped data found"') %}
+            <pre class="json-view">{{ scraped | tojson(indent=2) }}</pre>
+            {% else %}
+            <div class="no-data">
+                <i class="fas fa-info-circle" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+                <p>No scraped data found</p>
+            </div>
+            {% endif %}
+        </div>
+        
+        <div class="chart-grid">
+            <div class="chart-container">
+                <div class="chart-title">Classification Overview</div>
+                <div class="chart-wrapper">
+                    <canvas id="classificationPie"></canvas>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <div class="chart-title">VirusTotal Detections</div>
+                <div class="chart-wrapper">
+                    <canvas id="vtBarChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <div class="chart-title">Overall History (All Results)</div>
+                <div class="chart-wrapper">
+                    <canvas id="overallPie"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
 
-{% block content %}
-<h2>Scan Results</h2>
-
-<div class="card">
-    <h3>Input: {{ results.input }}</h3>
-    <p>Type: {{ results.type }}</p>
-    <p>Classification:
-        {% set cls = (results.classification or '') %}
-        <strong style="color: {{ 'red' if cls == 'Malicious' else ('green' if cls == 'Benign' else '#ff9800') }}">
-            {{ cls }}
-        </strong>
-    </p>
-</div>
-
-<hr>
-
-<h3>VirusTotal Report</h3>
-{% set vt = results.vt or {} %}
-{% set stats = vt.get("last_analysis_stats") or (vt.get("data", {}).get("attributes", {}).get("last_analysis_stats")) %}
-{% if stats %}
-    <ul>
-        <li><strong>Malicious:</strong> {{ stats.malicious }}</li>
-        <li><strong>Suspicious:</strong> {{ stats.suspicious }}</li>
-        <li><strong>Undetected:</strong> {{ stats.undetected }}</li>
-        <li><strong>Harmless:</strong> {{ stats.harmless }}</li>
-    </ul>
-    <details>
-        <summary>Show full VirusTotal JSON</summary>
-        <pre style="max-height:360px; overflow:auto; padding:12px; background:#0f172a; color:#e5e7eb; border-radius:8px;">
-{{ vt | tojson(indent=2) }}
-        </pre>
-    </details>
-{% else %}
-    <p>No VirusTotal data available</p>
-{% endif %}
-
-<h3>Shodan Report</h3>
-{% set shodan = results.shodan or {} %}
-{% if shodan %}
-    <ul>
-        <li><strong>IP:</strong> {{ shodan.ip_str or shodan.ip or "N/A" }}</li>
-        <li><strong>Organization:</strong> {{ shodan.org or "N/A" }}</li>
-        <li><strong>ISP:</strong> {{ shodan.isp or "N/A" }}</li>
-        <li><strong>Open Ports:</strong>
-            {% if shodan.ports %}{{ shodan.ports | join(", ") }}
-            {% elif shodan.data %}{{ shodan.data | map(attribute="port") | join(", ") }}
-            {% else %}N/A{% endif %}
-        </li>
-    </ul>
-    <details>
-        <summary>Show full Shodan JSON</summary>
-        <pre style="max-height:360px; overflow:auto; padding:12px; background:#0f172a; color:#e5e7eb; border-radius:8px;">
-{{ shodan | tojson(indent=2) }}
-        </pre>
-    </details>
-{% else %}
-    <p>No Shodan data available</p>
-{% endif %}
-
-<h3>Scraped Data</h3>
-{% set scraped = results.scraped or [] %}
-{% if scraped and not (scraped | tojson).lower().startswith('[{"title": "no scraped data found"') %}
-<pre style="max-height:360px; overflow:auto; padding:12px; background:#0f172a; color:#e5e7eb; border-radius:8px;">
-{{ scraped | tojson(indent=2) }}
-</pre>
-{% else %}
-<p>No scraped data found</p>
-{% endif %}
-
-<hr>
-
-<h3>Classification Overview (This Result)</h3>
-<div style="max-width:360px; min-height:300px;">
-    <canvas id="classificationPie"></canvas>
-</div>
-
-<h3 style="margin-top: 24px;">VirusTotal Detections</h3>
-<div style="max-width:520px; min-height:320px;">
-    <canvas id="vtBarChart"></canvas>
-</div>
-
-<h3 style="margin-top: 24px;">Overall History (All Results)</h3>
-<div style="max-width:360px; min-height:300px;">
-    <canvas id="overallPie"></canvas>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-const currentClass = {{ (results.classification or 'Unknown') | tojson }};
-const clsLabels = ['Malicious', 'Benign', 'Informational', 'Unknown'];
-const clsValues = clsLabels.map(l => l === currentClass ? 1 : 0);
-
-new Chart(document.getElementById('classificationPie'), {
-    type: 'pie',
-    data: {
-        labels: clsLabels,
-        datasets: [{
-            data: clsValues,
-            backgroundColor: ['#e74c3c', '#2ecc71', '#3498db', '#95a5a6']
-        }]
-    },
-    options: { responsive: true, maintainAspectRatio: false }
-});
-
-const vtStats = (() => {
-    try {
-        const vt = {{ (results.vt or {}) | tojson }};
-        if (vt.last_analysis_stats) return vt.last_analysis_stats;
-        if (vt.data && vt.data.attributes && vt.data.attributes.last_analysis_stats)
-            return vt.data.attributes.last_analysis_stats;
-        return {};
-    } catch (e) { return {}; }
-})();
-const vtLabels = Object.keys(vtStats);
-const vtValues = Object.values(vtStats);
-
-new Chart(document.getElementById('vtBarChart'), {
-    type: 'bar',
-    data: {
-        labels: vtLabels,
-        datasets: [{
-            label: 'VirusTotal Detection Stats',
-            data: vtValues,
-            backgroundColor: '#e67e22'
-        }]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+    <script>
+    // Classification Pie Chart
+    const currentClass = {{ (results.classification or 'Unknown') | tojson }};
+    const clsLabels = ['Malicious', 'Benign', 'Informational', 'Unknown'];
+    const clsValues = clsLabels.map(l => l === currentClass ? 1 : 0);
+    
+    new Chart(document.getElementById('classificationPie'), {
+        type: 'pie',
+        data: {
+            labels: clsLabels,
+            datasets: [{
+                data: clsValues,
+                backgroundColor: ['#e74c3c', '#2ecc71', '#3498db', '#95a5a6']
+            }]
+        },
+        options: { 
+            responsive: true, 
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                }
+            }
+        }
+    });
+    
+    // VirusTotal Bar Chart
+    const vtStats = (() => {
+        try {
+            const vt = {{ (results.vt or {}) | tojson }};
+            if (vt.last_analysis_stats) return vt.last_analysis_stats;
+            if (vt.data && vt.data.attributes && vt.data.attributes.last_analysis_stats)
+                return vt.data.attributes.last_analysis_stats;
+            return {};
+        } catch (e) { return {}; }
+    })();
+    
+    if (Object.keys(vtStats).length > 0) {
+        const vtLabels = Object.keys(vtStats);
+        const vtValues = Object.values(vtStats);
+        
+        new Chart(document.getElementById('vtBarChart'), {
+            type: 'bar',
+            data: {
+                labels: vtLabels,
+                datasets: [{
+                    label: 'VirusTotal Detection Stats',
+                    data: vtValues,
+                    backgroundColor: ['#e74c3c', '#f39c12', '#95a5a6', '#2ecc71']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { 
+                    legend: { 
+                        display: false 
+                    } 
+                },
+                scales: { 
+                    y: { 
+                        beginAtZero: true, 
+                        ticks: { precision: 0 } 
+                    } 
+                }
+            }
+        });
+    } else {
+        document.getElementById('vtBarChart').parentElement.innerHTML = 
+            '<div class="no-data"><p>No VirusTotal data available for chart</p></div>';
     }
-});
-
-const overallData = {{ chart_data | safe }};
-new Chart(document.getElementById('overallPie'), {
-    type: 'pie',
-    data: {
-        labels: overallData.labels,
-        datasets: [{
-            data: overallData.values,
-            backgroundColor: ['#e74c3c', '#2ecc71', '#3498db', '#95a5a6']
-        }]
-    },
-    options: { responsive: true, maintainAspectRatio: false }
-});
-</script>
-{% endblock %}
+    
+    // Overall History Pie Chart
+    const overallData = {{ chart_data | safe }};
+    
+    if (overallData && overallData.labels && overallData.values) {
+        new Chart(document.getElementById('overallPie'), {
+            type: 'pie',
+            data: {
+                labels: overallData.labels,
+                datasets: [{
+                    data: overallData.values,
+                    backgroundColor: ['#e74c3c', '#2ecc71', '#3498db', '#95a5a6']
+                }]
+            },
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+    } else {
+        document.getElementById('overallPie').parentElement.innerHTML = 
+            '<div class="no-data"><p>No historical data available</p></div>';
+    }
+    </script>
+</body>
+</html>
