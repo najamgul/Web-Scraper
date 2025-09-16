@@ -8,11 +8,12 @@ from flask import Blueprint, render_template, request, jsonify, send_file, redir
 from app.scraper import scrape_and_enrich, google_cse_search, scrape_otx_indicator
 from app.vt_shodan_api import vt_lookup_domain, vt_lookup_ip, vt_lookup_url, shodan_lookup
 from app.ml_model import classify_threat
-
-from app import db
+from app.forms import LoginForm, SignupForm
+from app.models import User
 from app.models import IOCResult, Feedback
-
+from werkzeug.security import generate_password_hash, check_password_hash
 from app.forms import InputForm
+from app import db
 
 main_bp = Blueprint("main", __name__)
 
@@ -36,7 +37,7 @@ def detect_ioc_type(ioc):
         return "keyword"
 
 
-@main_bp.route("/", methods=["GET", "POST"])
+@main_bp.route("/index", methods=["GET", "POST"])
 def index():
     form = InputForm()
     if form.validate_on_submit():
@@ -163,3 +164,52 @@ def admin_dashboard():
             "values": [malicious_count, benign_count, info_count, unknown_count]
         })
     )
+
+@main_bp.route("/")
+def landing():
+    return render_template("landing.html")
+
+# Signup
+@main_bp.route("/login", methods=["GET", "POST"])
+def login():
+    form = LoginForm()
+    if form.validate_on_submit():
+        user = User.query.filter_by(email=form.email.data).first()
+        if user and check_password_hash(user.password, form.password.data):
+            flash("Login successful!", "success")
+            return redirect(url_for("main.index"))
+        else:
+            flash("Invalid email or password", "danger")
+    return render_template("login.html", form=form)
+
+
+@main_bp.route("/signup", methods=["GET", "POST"])
+def signup():
+    form = SignupForm()
+    if form.validate_on_submit():
+        existing_user = User.query.filter_by(email=form.email.data).first()
+        if existing_user:
+            flash("Email already registered", "danger")
+        else:
+            new_user = User(
+                email=form.email.data,
+                password=generate_password_hash(form.password.data)
+            )
+            db.session.add(new_user)
+            db.session.commit()
+            flash("Signup successful! Please log in.", "success")
+            return redirect(url_for("main.login"))
+    return render_template("signup.html", form=form)
+
+# Dashboard
+@main_bp.route("/index")
+def dashboard():
+    if "user" in session:
+        return render_template("index.html", user=session["user"])
+    return redirect(url_for("main.login"))
+
+# Logout
+@main_bp.route("/logout")
+def logout():
+    session.pop("user", None)
+    return redirect(url_for("main.landing"))
