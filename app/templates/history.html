@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search History - Threat Intelligence Scanner</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            min-height: 100vh;
+            color: #e2e8f0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        header {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .back-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: rgba(30, 41, 59, 0.8);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            color: #4cc9f0;
+            text-decoration: none;
+            font-size: 1.2rem;
+        }
+        h1 {
+            font-size: 2.2rem;
+            background: linear-gradient(135deg, #4361ee 0%, #4cc9f0 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 800;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: rgba(30, 41, 59, 0.8);
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+        }
+        th, td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        th {
+            background: rgba(15, 23, 42, 0.9);
+            color: #4cc9f0;
+            font-weight: 600;
+        }
+        tr:hover {
+            background: rgba(76, 201, 240, 0.1);
+        }
+        .classification {
+            padding: 0.3rem 0.8rem;
+            border-radius: 8px;
+            font-weight: bold;
+            text-transform: capitalize;
+        }
+        .malicious { background: #c0392b; color: white; }
+        .benign { background: #27ae60; color: white; }
+        .informational { background: #3498db; color: white; }
+        .unknown { background: #7f8c8d; color: white; }
+        .export-links {
+            margin-top: 2rem;
+            text-align: center;
+        }
+        .export-links a {
+            display: inline-block;
+            margin: 0 1rem;
+            padding: 0.8rem 1.5rem;
+            background: #4361ee;
+            color: white;
+            border-radius: 10px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        .export-links a:hover {
+            background: #4cc9f0;
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <a href="{{ url_for('main.index') }}" class="back-btn">
+                <i class="fas fa-arrow-left"></i>
+            </a>
+            <h1>Your Search History</h1>
+        </header>
+
+        {% if results %}
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Input</th>
+                    <th>Type</th>
+                    <th>Classification</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in results %}
+                <tr>
+                    <td>{{ r.id }}</td>
+                    <td>{{ r.input_value }}</td>
+                    <td>{{ r.type }}</td>
+                    <td>
+                        <span class="classification {{ r.classification.lower() }}">
+                            {{ r.classification }}
+                        </span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+            <p style="text-align:center; font-style:italic; margin-top:2rem;">No past searches found.</p>
+        {% endif %}
+
+       <div class="export-links">
+    <a href="{{ url_for('main.export_results', fmt='csv') }}">Export CSV</a>
+    <a href="{{ url_for('main.export_results', fmt='json') }}">Export JSON</a>
+    <a href="{{ url_for('main.export_results', fmt='xlsx') }}">Export Excel</a>
+    <a href="{{ url_for('main.export_results', fmt='pdf') }}">Export PDF</a>
+</div>
+    </div>
+</body>
+</html>

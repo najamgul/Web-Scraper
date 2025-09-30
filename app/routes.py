@@ -3,8 +3,13 @@ import re
 import json
 import csv
 import io
+from flask import session
 from flask import Blueprint, render_template, request, jsonify, send_file, redirect, url_for, flash
-
+from flask import send_file
+import pandas as pd
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+from io import BytesIO
 from app.scraper import scrape_and_enrich, google_cse_search, scrape_otx_indicator
 from app.vt_shodan_api import vt_lookup_domain, vt_lookup_ip, vt_lookup_url, shodan_lookup
 from app.ml_model import classify_threat
@@ -82,8 +87,10 @@ def index():
             vt_report=vt_data,
             shodan_report=shodan_data,
             scraped_data=scraped_data,
-            classification=classification
-        )
+            classification=classification,
+            user_id=session.get("user_id")  # NEW: link to logged-in user
+            )
+
         db.session.add(ioc_result)
         db.session.commit()
 
@@ -120,28 +127,72 @@ def feedback(ioc_id):
     return jsonify({"message": "Feedback saved"})
 
 
+
+
 @main_bp.route("/export/<fmt>")
 def export_results(fmt):
-    results = IOCResult.query.all()
+    user_id = session.get("user_id")
+    if not user_id:
+        flash("You must be logged in to export results.", "warning")
+        return redirect(url_for("main.login"))
+
+    results = IOCResult.query.filter_by(user_id=user_id).all()
+
+    export_data = []
+    for r in results:
+        export_data.append({
+            "user": r.user.email if r.user else "unknown",
+            "input": r.input_value,
+            "input_type": r.type,
+            "classification": r.classification,
+            "virustotal": r.vt_report,
+            "shodan": r.shodan_report,
+            "scraped_data": r.scraped_data,
+            "timestamp": r.timestamp.isoformat() if r.timestamp else None
+        })
+
+    # ---- JSON ----
+    if fmt == "json":
+        return jsonify(export_data)
+
+    # ---- CSV ---- (already working)
     if fmt == "csv":
         output = io.StringIO()
-        writer = csv.writer(output)
-        writer.writerow(["id", "input_value", "type", "classification", "vt_report", "shodan_report", "scraped_data"])
-        for r in results:
-            writer.writerow([r.id, r.input_value, r.type, r.classification, json.dumps(r.vt_report), json.dumps(r.shodan_report), json.dumps(r.scraped_data)])
+        writer = csv.DictWriter(output, fieldnames=export_data[0].keys())
+        writer.writeheader()
+        writer.writerows(export_data)
         output.seek(0)
-        return send_file(io.BytesIO(output.getvalue().encode()), mimetype="text/csv", as_attachment=True, download_name="ioc_results.csv")
+        return send_file(io.BytesIO(output.getvalue().encode()), mimetype="text/csv",
+                         as_attachment=True, download_name="ioc_results.csv")
 
-    elif fmt == "json":
-        return jsonify([{
-            "id": r.id,
-            "input_value": r.input_value,
-            "type": r.type,
-            "classification": r.classification,
-            "vt_report": r.vt_report,
-            "shodan_report": r.shodan_report,
-            "scraped_data": r.scraped_data
-        } for r in results])
+    # ---- Excel ----
+    if fmt == "xlsx":
+        df = pd.DataFrame(export_data)
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            df.to_excel(writer, index=False, sheet_name="Results")
+        output.seek(0)
+        return send_file(output, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                         as_attachment=True, download_name="ioc_results.xlsx")
+
+    # ---- PDF ----
+    if fmt == "pdf":
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer)
+        styles = getSampleStyleSheet()
+        elements = []
+        for item in export_data:
+            elements.append(Paragraph(f"<b>User:</b> {item['user']}", styles["Normal"]))
+            elements.append(Paragraph(f"<b>Input:</b> {item['input']} ({item['input_type']})", styles["Normal"]))
+            elements.append(Paragraph(f"<b>Classification:</b> {item['classification']}", styles["Normal"]))
+            elements.append(Paragraph(f"<b>Timestamp:</b> {item['timestamp']}", styles["Normal"]))
+            elements.append(Paragraph(f"<b>VirusTotal:</b> {item['virustotal']}", styles["Normal"]))
+            elements.append(Paragraph(f"<b>Shodan:</b> {item['shodan']}", styles["Normal"]))
+            elements.append(Paragraph(f"<b>Scraped Data:</b> {item['scraped_data']}", styles["Normal"]))
+            elements.append(Spacer(1, 12))
+        doc.build(elements)
+        buffer.seek(0)
+        return send_file(buffer, mimetype="application/pdf", as_attachment=True, download_name="ioc_results.pdf")
 
     return jsonify({"error": "Unsupported format"}), 400
 
@@ -177,6 +228,7 @@ def login():
     if form.validate_on_submit():
         user = User.query.filter_by(email=form.email.data).first()
         if user and check_password_hash(user.password, form.password.data):
+            session["user_id"] = user.id   # save logged-in user ID
             flash("Login successful!", "success")
             return redirect(url_for("main.index"))
         else:
@@ -209,8 +261,17 @@ def dashboard():
         return render_template("index.html", user=session["user"])
     return redirect(url_for("main.login"))
 
+@main_bp.route("/history")
+def history():
+    user_id = session.get("user_id")
+    if not user_id:
+        return redirect(url_for("main.login"))
+    results = IOCResult.query.filter_by(user_id=user_id).all()
+    return render_template("history.html", results=results)
+
+
 # Logout
 @main_bp.route("/logout")
 def logout():
-    session.pop("user", None)
+    session.pop("user_id", None)
     return redirect(url_for("main.landing"))

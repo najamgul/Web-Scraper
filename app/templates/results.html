@@ -597,6 +597,14 @@
                 </div>
             </div>
         </div>
+        <div class="export-links">
+    <a href="{{ url_for('main.export_results', fmt='csv') }}">Export CSV</a>
+    <a href="{{ url_for('main.export_results', fmt='json') }}">Export JSON</a>
+    <a href="{{ url_for('main.export_results', fmt='xlsx') }}">Export Excel</a>
+    <a href="{{ url_for('main.export_results', fmt='pdf') }}">Export PDF</a>
+</div>
+
+
         
         <footer>
             <p>© 2023 Threat Intelligence Scanner | Advanced 3D Threat Analysis</p>
