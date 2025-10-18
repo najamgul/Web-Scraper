@@ -30,5 +30,8 @@ WTForms==3.2.1
 xlsxwriter==3.2.5
 flask_sqlalchemy==3.1.1
 email_validator==2.3.0
+flask
+gunicorn
+
 
 
