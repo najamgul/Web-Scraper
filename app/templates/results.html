@@ -1,96 +1,799 @@
-{% extends "base.html" %}
-{% block content %}
-<h2>Scan Results</h2>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scan Results - 3D Threat Intelligence Scanner</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            min-height: 100vh;
+            color: #e2e8f0;
+            padding: 0;
+            overflow-x: hidden;
+        }
+        
+        /* 3D Background Elements */
+        .bg-cubes {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            overflow: hidden;
+        }
+        
+        .cube {
+            position: absolute;
+            background: linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%);
+            opacity: 0.15;
+            transform-style: preserve-3d;
+            animation: float 20s infinite linear;
+        }
+        
+        .cube:nth-child(1) {
+            width: 100px;
+            height: 100px;
+            top: 10%;
+            left: 10%;
+            transform: rotate(45deg) translate3d(0, 0, 0);
+            background: linear-gradient(135deg, #4361ee 0%, #7209b7 100%);
+            animation-delay: 0s;
+        }
+        
+        .cube:nth-child(2) {
+            width: 150px;
+            height: 150px;
+            top: 60%;
+            left: 80%;
+            transform: rotate(20deg) translate3d(0, 0, 0);
+            background: linear-gradient(135deg, #f72585 0%, #b5179e 100%);
+            animation-delay: -5s;
+        }
+        
+        .cube:nth-child(3) {
+            width: 200px;
+            height: 200px;
+            top: 30%;
+            left: 60%;
+            transform: rotate(60deg) translate3d(0, 0, 0);
+            background: linear-gradient(135deg, #4cc9f0 0%, #4895ef 100%);
+            animation-delay: -10s;
+        }
+        
+        .cube:nth-child(4) {
+            width: 120px;
+            height: 120px;
+            top: 70%;
+            left: 20%;
+            transform: rotate(80deg) translate3d(0, 0, 0);
+            background: linear-gradient(135deg, #f9c74f 0%, #f9844a 100%);
+            animation-delay: -15s;
+        }
+        
+        @keyframes float {
+            0% {
+                transform: rotate(0deg) translate3d(0, 0, 0);
+            }
+            100% {
+                transform: rotate(360deg) translate3d(0, 0, 0);
+            }
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+            position: relative;
+            z-index: 1;
+        }
+        
+        header {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+        
+        .back-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3),
+                        0 0 0 1px rgba(255, 255, 255, 0.1);
+            color: #4cc9f0;
+            text-decoration: none;
+            transition: all 0.4s ease;
+            font-size: 1.5rem;
+            transform: perspective(500px) rotateY(15deg);
+        }
+        
+        .back-btn:hover {
+            transform: perspective(500px) rotateY(0deg) translateX(-5px);
+            box-shadow: 0 15px 25px rgba(0, 0, 0, 0.4),
+                        0 0 0 1px rgba(76, 201, 240, 0.3);
+            color: #4361ee;
+        }
+        
+        h1 {
+            font-size: 2.8rem;
+            background: linear-gradient(135deg, #4361ee 0%, #4cc9f0 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 800;
+            text-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        /* 3D Summary Card */
+        .summary-card {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3),
+                        0 0 0 1px rgba(255, 255, 255, 0.1);
+            padding: 3rem;
+            margin-bottom: 4rem;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2.5rem;
+            transform: perspective(1000px) rotateX(5deg);
+            transition: transform 0.5s ease;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .summary-card:hover {
+            transform: perspective(1000px) rotateX(0deg);
+        }
+        
+        .summary-item {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .summary-label {
+            font-size: 1.1rem;
+            color: #94a3b8;
+            margin-bottom: 1rem;
+            font-weight: 600;
+        }
+        
+        .summary-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #e2e8f0;
+        }
+        
+        .classification {
+            display: inline-flex;
+            align-items: center;
+            padding: 1rem 2rem;
+            border-radius: 100px;
+            font-weight: 700;
+            font-size: 1.3rem;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+            transform: perspective(500px) rotateY(15deg);
+            transition: transform 0.4s ease;
+        }
+        
+        .classification:hover {
+            transform: perspective(500px) rotateY(0deg);
+        }
+        
+        .malicious {
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+            color: white;
+        }
+        
+        .benign {
+            background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
+            color: white;
+        }
+        
+        .unknown {
+            background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+            color: white;
+        }
+        
+        .section-title {
+            font-size: 2rem;
+            background: linear-gradient(135deg, #4cc9f0 0%, #4361ee 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin: 4rem 0 2.5rem;
+            display: flex;
+            align-items: center;
+            gap: 1.2rem;
+            font-weight: 700;
+        }
+        
+        /* 3D Report Cards */
+        .report-card {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3),
+                        0 0 0 1px rgba(255, 255, 255, 0.1);
+            padding: 3rem;
+            margin-bottom: 3.5rem;
+            transform: perspective(1000px) rotateX(5deg);
+            transition: transform 0.5s ease;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .report-card:hover {
+            transform: perspective(1000px) rotateX(0deg);
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 2.5rem;
+            margin-bottom: 3rem;
+        }
+        
+        .stat-item {
+            text-align: center;
+            padding: 2.5rem;
+            border-radius: 20px;
+            background: rgba(15, 23, 42, 0.5);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+            transform: perspective(500px) rotateY(15deg);
+            transition: transform 0.4s ease;
+        }
+        
+        .stat-item:hover {
+            transform: perspective(500px) rotateY(0deg);
+        }
+        
+        .stat-value {
+            font-size: 3rem;
+            font-weight: 800;
+            margin-bottom: 1rem;
+        }
+        
+        .stat-label {
+            font-size: 1.1rem;
+            color: #94a3b8;
+            font-weight: 600;
+        }
+        
+        .malicious-stat {
+            color: #e74c3c;
+            text-shadow: 0 0 10px rgba(231, 76, 60, 0.3);
+        }
+        
+        .suspicious-stat {
+            color: #f39c12;
+            text-shadow: 0 0 10px rgba(243, 156, 18, 0.3);
+        }
+        
+        .undetected-stat {
+            color: #95a5a6;
+            text-shadow: 0 0 10px rgba(149, 165, 166, 0.3);
+        }
+        
+        .harmless-stat {
+            color: #2ecc71;
+            text-shadow: 0 0 10px rgba(46, 204, 113, 0.3);
+        }
+        
+        details {
+            margin-top: 2.5rem;
+        }
+        
+        summary {
+            cursor: pointer;
+            padding: 1.5rem;
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: 15px;
+            font-weight: 600;
+            color: #4cc9f0;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s ease;
+            font-size: 1.1rem;
+        }
+        
+        summary:hover {
+            background: rgba(15, 23, 42, 0.7);
+            transform: translateY(-3px);
+        }
+        
+        summary::-webkit-details-marker {
+            display: none;
+        }
+        
+        summary::before {
+            content: '►';
+            font-size: 1rem;
+            transition: transform 0.3s ease;
+        }
+        
+        details[open] summary::before {
+            transform: rotate(90deg);
+        }
+        
+        .json-view {
+            max-height: 400px;
+            overflow: auto;
+            padding: 2.5rem;
+            background: rgba(15, 23, 42, 0.7);
+            color: #e2e8f0;
+            border-radius: 15px;
+            margin-top: 2rem;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.95rem;
+            line-height: 1.6;
+            box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        /* 3D Chart Containers */
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 3rem;
+            margin: 5rem 0;
+        }
+        
+        .chart-container {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3),
+                        0 0 0 1px rgba(255, 255, 255, 0.1);
+            padding: 2.5rem;
+            height: 400px;
+            display: flex;
+            flex-direction: column;
+            transform: perspective(1000px) rotateX(5deg);
+            transition: transform 0.5s ease;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .chart-container:hover {
+            transform: perspective(1000px) rotateX(0deg);
+        }
+        
+        .chart-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 2rem;
+            color: #e2e8f0;
+            text-align: center;
+        }
+        
+        .chart-wrapper {
+            flex-grow: 1;
+            position: relative;
+        }
+        
+        .no-data {
+            text-align: center;
+            padding: 3rem;
+            color: #94a3b8;
+            font-style: italic;
+            font-size: 1.2rem;
+        }
 
-<div class="results-section">
+        /* Export Links Styling */
+        .export-links {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 2.5rem;
+            margin: 4rem 0;
+            text-align: center;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
 
-    <!-- Classification -->
-    <div class="card mb-3 p-3">
-        <h3>Classification</h3>
-        <p>{{ results.classification or "Unknown" }}</p>
+        .export-links a {
+            display: inline-block;
+            margin: 0.5rem;
+            padding: 1rem 2rem;
+            background: linear-gradient(135deg, #4361ee 0%, #4cc9f0 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 12px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(67, 97, 238, 0.3);
+        }
+
+        .export-links a:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(67, 97, 238, 0.5);
+        }
+        
+        footer {
+            margin-top: 6rem;
+            text-align: center;
+            color: #94a3b8;
+            font-size: 1.1rem;
+            padding: 3rem 0;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 1.5rem;
+            }
+            
+            h1 {
+                font-size: 2.2rem;
+            }
+            
+            .summary-card, .report-card, .chart-container {
+                padding: 2rem;
+                transform: none;
+                grid-template-columns: 1fr;
+            }
+            
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .chart-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .chart-container {
+                height: 350px;
+            }
+            
+            .cube {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-cubes">
+        <div class="cube"></div>
+        <div class="cube"></div>
+        <div class="cube"></div>
+        <div class="cube"></div>
     </div>
-
-    <!-- VirusTotal -->
-    <div class="card mb-3 p-3">
-        <h3>VirusTotal</h3>
-        {% if results.vt %}
-            <pre style="white-space: pre-wrap; font-family: monospace; background:#0f172a; color:#e5e7eb; padding:12px; border-radius:8px;">
-{{ results.vt | tojson(indent=2) }}
-            </pre>
-        {% else %}
-            <p>No VirusTotal data available</p>
-        {% endif %}
-    </div>
-
-    <!-- Passive Recon -->
-    <div class="card mb-3 p-3">
-        <h3>Passive Recon</h3>
-        {% if results.passive %}
-            <pre style="white-space: pre-wrap; font-family: monospace; background:#f9fafb; padding:12px; border-radius:8px;">
-{{ results.passive }}
-            </pre>
-        {% else %}
-            <p>No passive recon data available</p>
-        {% endif %}
-    </div>
-
-    <!-- Active Recon -->
-    <div class="card mb-3 p-3">
-        <h3>Active Recon</h3>
-        {% if results.active %}
-            <pre style="white-space: pre-wrap; font-family: monospace; background:#f9fafb; padding:12px; border-radius:8px;">
-{{ results.active }}
-            </pre>
-        {% else %}
-            <p>No active recon data available</p>
-        {% endif %}
-    </div>
-
-    <!-- ✅ Scraped Data (formatted cards) -->
-    <div class="card mb-3 p-3">
-        <h3>Scraped Data</h3>
-        {% set scraped = results.scraped or [] %}
-        {% if scraped %}
-            <div class="grid gap-4">
-                {% for item in scraped %}
-                    <div class="card" style="padding:16px; border:1px solid #ddd; border-radius:8px; background:#f9fafb; margin-bottom:12px;">
-                        <h4 style="margin:0; color:#1e3a8a;">
-                            <a href="{{ item.url }}" target="_blank">{{ item.title }}</a>
-                        </h4>
-                        <p style="margin:6px 0; color:#374151;">{{ item.snippet }}</p>
-
-                        {% if item.iocs %}
-                        <details style="margin-top:8px;">
-                            <summary style="cursor:pointer;">IOCs</summary>
-                            <ul style="margin-left:16px; color:#111827;">
-                                {% if item.iocs.urls %}
-                                    <li><strong>URLs:</strong> {{ item.iocs.urls | join(", ") }}</li>
-                                {% endif %}
-                                {% if item.iocs.ips %}
-                                    <li><strong>IPs:</strong> {{ item.iocs.ips | join(", ") }}</li>
-                                {% endif %}
-                                {% if item.iocs.hashes %}
-                                    <li><strong>Hashes:</strong> {{ item.iocs.hashes | join(", ") }}</li>
-                                {% endif %}
-                            </ul>
-                        </details>
-                        {% endif %}
-
-                        {% if item.content %}
-                        <details style="margin-top:8px;">
-                            <summary style="cursor:pointer;">Full Content</summary>
-                            <pre style="max-height:200px; overflow:auto; white-space:pre-wrap; background:#0f172a; color:#e5e7eb; padding:8px; border-radius:6px;">
-{{ item.content }}
-                            </pre>
-                        </details>
-                        {% endif %}
-                    </div>
-                {% endfor %}
+    
+    <div class="container">
+        <header>
+            <a href="{{ url_for('main.index') }}" class="back-btn">
+                <i class="fas fa-arrow-left"></i>
+            </a>
+            <h1>Scan Results</h1>
+        </header>
+        
+        <div class="summary-card">
+            <div class="summary-item">
+                <span class="summary-label">Input</span>
+                <span class="summary-value">{{ results.input }}</span>
             </div>
-        {% else %}
-            <p>No scraped data found</p>
-        {% endif %}
+            
+            <div class="summary-item">
+                <span class="summary-label">Type</span>
+                <span class="summary-value">{{ results.type }}</span>
+            </div>
+            
+            <div class="summary-item">
+                <span class="summary-label">Classification</span>
+                {% set cls = (results.classification or 'Unknown') %}
+                <span class="summary-value">
+                    <span class="classification {{ cls.lower() }}">{{ cls }}</span>
+                </span>
+            </div>
+        </div>
+        
+        <h2 class="section-title"><i class="fas fa-shield-virus"></i> VirusTotal Report</h2>
+        
+        {% set vt = results.vt or {} %}
+        {% set stats = vt.get("last_analysis_stats") or (vt.get("data", {}).get("attributes", {}).get("last_analysis_stats")) %}
+        
+        <div class="report-card">
+            {% if stats %}
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-value malicious-stat">{{ stats.malicious }}</div>
+                    <div class="stat-label">Malicious</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value suspicious-stat">{{ stats.suspicious }}</div>
+                    <div class="stat-label">Suspicious</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value undetected-stat">{{ stats.undetected }}</div>
+                    <div class="stat-label">Undetected</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value harmless-stat">{{ stats.harmless }}</div>
+                    <div class="stat-label">Harmless</div>
+                </div>
+            </div>
+            
+            <details>
+                <summary>View full VirusTotal JSON data</summary>
+                <pre class="json-view">{{ vt | tojson(indent=2) }}</pre>
+            </details>
+            {% else %}
+            <div class="no-data">
+                <i class="fas fa-info-circle" style="font-size: 3rem; margin-bottom: 1.5rem;"></i>
+                <p>No VirusTotal data available</p>
+            </div>
+            {% endif %}
+        </div>
+        
+        <h2 class="section-title"><i class="fas fa-search-location"></i> Shodan Report</h2>
+        
+        {% set shodan = results.shodan or {} %}
+        
+        <div class="report-card">
+            {% if shodan %}
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-value">{{ shodan.ip_str or shodan.ip or "N/A" }}</div>
+                    <div class="stat-label">IP Address</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">{{ shodan.org or "N/A" }}</div>
+                    <div class="stat-label">Organization</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">{{ shodan.isp or "N/A" }}</div>
+                    <div class="stat-label">ISP</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">
+                        {% if shodan.ports %}{{ shodan.ports | length }}
+                        {% elif shodan.data %}{{ shodan.data | length }}
+                        {% else %}0{% endif %}
+                    </div>
+                    <div class="stat-label">Open Ports</div>
+                </div>
+            </div>
+            
+            {% if shodan.ports or shodan.data %}
+            <div style="margin-top: 2rem; padding: 1.5rem; background: rgba(15, 23, 42, 0.5); border-radius: 15px;">
+                <strong style="color: #4cc9f0; font-size: 1.1rem;">Open Ports:</strong>
+                <span style="font-family: monospace; color: #e2e8f0; margin-left: 1rem;">
+                    {% if shodan.ports %}{{ shodan.ports | join(", ") }}
+                    {% elif shodan.data %}{{ shodan.data | map(attribute="port") | join(", ") }}
+                    {% else %}N/A{% endif %}
+                </span>
+            </div>
+            {% endif %}
+            
+            <details>
+                <summary>View full Shodan JSON data</summary>
+                <pre class="json-view">{{ shodan | tojson(indent=2) }}</pre>
+            </details>
+            {% else %}
+            <div class="no-data">
+                <i class="fas fa-info-circle" style="font-size: 3rem; margin-bottom: 1.5rem;"></i>
+                <p>No Shodan data available</p>
+            </div>
+            {% endif %}
+        </div>
+        
+        <!-- ✅ ALIENVAULT OTX REPORT (NEW SECTION) -->
+        <h2 class="section-title"><i class="fas fa-database"></i> AlienVault OTX Threat Intelligence</h2>
+        
+        {% set otx = results.otx or {} %}
+        
+        <div class="report-card">
+            {% if otx %}
+            <details open>
+                <summary>View AlienVault OTX Report</summary>
+                <pre class="json-view">{{ otx | tojson(indent=2) }}</pre>
+            </details>
+            {% else %}
+            <div class="no-data">
+                <i class="fas fa-info-circle" style="font-size: 3rem; margin-bottom: 1.5rem;"></i>
+                <p>No AlienVault OTX data available</p>
+            </div>
+            {% endif %}
+        </div>
+        
+        <h2 class="section-title"><i class="fas fa-globe"></i> Scraped Data</h2>
+        
+        {% set scraped = results.scraped or [] %}
+        
+        <div class="report-card">
+            {% if scraped and not (scraped | tojson).lower().startswith('[{"title": "no scraped data found"') %}
+            <pre class="json-view">{{ scraped | tojson(indent=2) }}</pre>
+            {% else %}
+            <div class="no-data">
+                <i class="fas fa-info-circle" style="font-size: 3rem; margin-bottom: 1.5rem;"></i>
+                <p>No scraped data found</p>
+            </div>
+            {% endif %}
+        </div>
+        
+        <div class="chart-grid">
+            <div class="chart-container">
+                <div class="chart-title">Classification Overview</div>
+                <div class="chart-wrapper">
+                    <canvas id="classificationPie"></canvas>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <div class="chart-title">VirusTotal Detections</div>
+                <div class="chart-wrapper">
+                    <canvas id="vtBarChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <div class="chart-title">Overall History (All Results)</div>
+                <div class="chart-wrapper">
+                    <canvas id="overallPie"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- ✅ FIXED EXPORT LINKS -->
+        <div class="export-links">
+            <h3 style="margin-bottom: 1.5rem; color: #e2e8f0;">Export Results</h3>
+            <a href="{{ url_for('main.export', format='csv', ioc_id=results.ioc_id) }}">
+                <i class="fas fa-file-csv"></i> Export CSV
+            </a>
+            <a href="{{ url_for('main.export', format='json', ioc_id=results.ioc_id) }}">
+                <i class="fas fa-file-code"></i> Export JSON
+            </a>
+            <a href="{{ url_for('main.export', format='xlsx', ioc_id=results.ioc_id) }}">
+                <i class="fas fa-file-excel"></i> Export Excel
+            </a>
+            <a href="{{ url_for('main.export', format='pdf', ioc_id=results.ioc_id) }}">
+                <i class="fas fa-file-pdf"></i> Export PDF
+            </a>
+        </div>
+        
+        <footer>
+            <p>© 2025 Threat Intelligence Scanner | Advanced 3D Threat Analysis</p>
+        </footer>
     </div>
 
-</div>
-{% endblock %}
+    <script>
+    // Classification Pie Chart
+    const currentClass = {{ (results.classification or 'Unknown') | tojson }};
+    const clsLabels = ['Malicious', 'Benign', 'Informational', 'Unknown'];
+    const clsValues = clsLabels.map(l => l === currentClass ? 1 : 0);
+    
+    new Chart(document.getElementById('classificationPie'), {
+        type: 'pie',
+        data: {
+            labels: clsLabels,
+            datasets: [{
+                data: clsValues,
+                backgroundColor: ['#e74c3c', '#2ecc71', '#3498db', '#95a5a6']
+            }]
+        },
+        options: { 
+            responsive: true, 
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        color: '#e2e8f0',
+                        font: {
+                            size: 14
+                        }
+                    }
+                }
+            }
+        }
+    });
+    
+    // VirusTotal Bar Chart
+    const vtStats = (() => {
+        try {
+            const vt = {{ (results.vt or {}) | tojson }};
+            if (vt.last_analysis_stats) return vt.last_analysis_stats;
+            if (vt.data && vt.data.attributes && vt.data.attributes.last_analysis_stats)
+                return vt.data.attributes.last_analysis_stats;
+            return {};
+        } catch (e) { return {}; }
+    })();
+    
+    if (Object.keys(vtStats).length > 0) {
+        const vtLabels = Object.keys(vtStats);
+        const vtValues = Object.values(vtStats);
+        
+        new Chart(document.getElementById('vtBarChart'), {
+            type: 'bar',
+            data: {
+                labels: vtLabels,
+                datasets: [{
+                    label: 'VirusTotal Detection Stats',
+                    data: vtValues,
+                    backgroundColor: ['#e74c3c', '#f39c12', '#95a5a6', '#2ecc71']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { 
+                    legend: { 
+                        display: false 
+                    } 
+                },
+                scales: { 
+                    y: { 
+                        beginAtZero: true, 
+                        ticks: { 
+                            precision: 0,
+                            color: '#e2e8f0'
+                        },
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        }
+                    },
+                    x: {
+                        ticks: {
+                            color: '#e2e8f0'
+                        },
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        }
+                    }
+                }
+            }
+        });
+    } else {
+        document.getElementById('vtBarChart').parentElement.innerHTML = 
+            '<div class="no-data"><p>No VirusTotal data available for chart</p></div>';
+    }
+    
+    // Overall History Pie Chart
+    const overallData = {{ chart_data | safe }};
+    
+    if (overallData && overallData.labels && overallData.values) {
+        new Chart(document.getElementById('overallPie'), {
+            type: 'pie',
+            data: {
+                labels: overallData.labels,
+                datasets: [{
+                    data: overallData.values,
+                    backgroundColor: ['#e74c3c', '#2ecc71', '#3498db', '#95a5a6']
+                }]
+            },
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            color: '#e2e8f0',
+                            font: {
+                                size: 14
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    } else {
+        document.getElementById('overallPie').parentElement.innerHTML = 
+            '<div class="no-data"><p>No historical data available</p></div>';
+    }
+    </script>
+</body>
+</html>

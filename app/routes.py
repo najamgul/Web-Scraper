@@ -1,18 +1,23 @@
+# routes.py
 import os
 import re
 import json
 import csv
 import io
-from flask import Blueprint, render_template, request, jsonify, send_file, redirect, url_for, flash
-
-from app.scraper import scrape_and_enrich, google_cse_search, scrape_otx_indicator
-from app.vt_shodan_api import vt_lookup_domain, vt_lookup_ip, vt_lookup_url, shodan_lookup
-from app.ml_model import classify_threat
-from app.forms import LoginForm, SignupForm
-from app.models import User
-from app.models import IOCResult, Feedback
+from flask import session, Blueprint, render_template, request, jsonify, send_file, redirect, url_for, flash
+import pandas as pd
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+from io import BytesIO
 from werkzeug.security import generate_password_hash, check_password_hash
-from app.forms import InputForm
+from datetime import datetime
+
+from app.scraper import google_cse_search
+from app.vt_shodan_api import vt_lookup_domain, vt_lookup_ip, vt_lookup_url, shodan_lookup
+from app.otx_api import otx_lookup
+from app.ml_model import classify_threat
+from app.forms import InputForm, LoginForm, SignupForm
+from app.models import User, IOCResult, Feedback
 from app import db
 
 main_bp = Blueprint("main", __name__)
@@ -23,7 +28,7 @@ def detect_ioc_type(ioc):
     ip_pattern = r"^(?:\d{1,3}\.){3}\d{1,3}$"
     url_pattern = r"^https?://[^\s/$.?#].[^\s]*$"
     domain_pattern = r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(?:\.[A-Za-z]{2,})+$"
-    hash_pattern = r"^[a-fA-F0-9]{32,128}$"  # MD5/SHA1/SHA256 hashes
+    hash_pattern = r"^[a-fA-F0-9]{32,128}$"
 
     if re.match(ip_pattern, ioc):
         return "ip"
@@ -37,6 +42,7 @@ def detect_ioc_type(ioc):
         return "keyword"
 
 
+@main_bp.route("/", methods=["GET", "POST"])
 @main_bp.route("/index", methods=["GET", "POST"])
 def index():
     form = InputForm()
@@ -47,46 +53,73 @@ def index():
             return redirect(url_for("main.index"))
 
         ioc_type = detect_ioc_type(user_input)
-        vt_data = None
-        shodan_data = None
-        scraped_data = None
 
-        if ioc_type == "keyword":
-            scraped_data = scrape_and_enrich(user_input)
-            vt_data = {}
-            shodan_data = {}
-        elif ioc_type == "domain":
-            vt_data = vt_lookup_domain(user_input) or {}
-            scraped_data = scrape_otx_indicator(user_input, "domain")
-        elif ioc_type == "ip":
+        # Initialize data
+        vt_data = {}
+        shodan_data = {}
+        otx_data = {}
+        scraped_data = []
+
+        # --- Query APIs for threat intelligence ---
+        # OTX is queried for ALL types
+        otx_data = otx_lookup(user_input, ioc_type) or {}
+
+        if ioc_type == "ip":
             vt_data = vt_lookup_ip(user_input) or {}
             shodan_data = shodan_lookup(user_input) or {}
-            scraped_data = scrape_otx_indicator(user_input, "ip")
+       
+        if ioc_type == "ip":
+            vt_data = vt_lookup_ip(user_input) or {}
+            shodan_data = shodan_lookup(user_input) or {}
+            
+            # ✅ DEBUG: Check what VirusTotal returns
+            print("=" * 60)
+            print(f"DEBUG - Input: {user_input}")
+            print(f"DEBUG - VT Data: {vt_data}")
+            print(f"DEBUG - Shodan Data: {shodan_data}")
+            print("=" * 60)
+
         elif ioc_type == "url":
             vt_data = vt_lookup_url(user_input) or {}
-            scraped_data = scrape_otx_indicator(user_input, "url")
+
+        elif ioc_type == "domain":
+            vt_data = vt_lookup_domain(user_input) or {}
+
         elif ioc_type == "hash":
-            # Implement ThreatFox or other hash enrichment if available
-            scraped_data = scrape_otx_indicator(user_input, "hash")
-            vt_data = {}
-            shodan_data = {}
+            vt_data = vt_lookup_domain(user_input) or {}  # VT supports hash lookup via domain endpoint
+        
+        # --- Google CSE used ONLY for display (not classification) ---
+        if ioc_type == "keyword":
+            scraped_data = google_cse_search(user_input)
+        
+        # --- Classification based ONLY on API data (VT, Shodan, OTX) ---
+        # For keywords: uses ONLY OTX
+        # For others: uses Random Forest with all APIs
+        classification = classify_threat(
+            vt_data=vt_data,
+            shodan_data=shodan_data,
+            otx_data=otx_data,
+            ioc_type=ioc_type,
+            user_input=user_input
+        )
 
-        if not scraped_data:
-            scraped_data = [{"title": "No scraped data found", "context": ""}]
-
-        classification = classify_threat(vt_data, shodan_data, scraped_data, ioc_type, user_input)
-
+        # --- Save to DB ---
         ioc_result = IOCResult(
             input_value=user_input,
             type=ioc_type,
             vt_report=vt_data,
             shodan_report=shodan_data,
+            otx_report=otx_data,  # Changed from abusix_report
             scraped_data=scraped_data,
-            classification=classification
+            classification=classification,
+            user_id=session.get("user_id"),
+            timestamp=datetime.utcnow()
         )
+
         db.session.add(ioc_result)
         db.session.commit()
 
+        # --- Chart Data ---
         chart_data = {
             "labels": ["Malicious", "Benign", "Informational", "Unknown"],
             "values": [
@@ -98,16 +131,20 @@ def index():
         }
 
         return render_template("results.html", results={
-        "ioc_id": ioc_result.id,  # ✅ auto-generate a stable ID
-        "input": user_input,
-        "type": ioc_type,
-        "vt": vt_data,
-        "shodan": shodan_data,
-        "scraped": scraped_data,
-        "classification": classification
-    }, chart_data=json.dumps(chart_data))
+            "ioc_id": ioc_result.id,
+            "input": user_input,
+            "type": ioc_type,
+            "vt": vt_data,
+            "shodan": shodan_data,
+            "otx": otx_data,
+            "scraped": scraped_data,
+            "classification": classification
+        }, chart_data=json.dumps(chart_data))
+
     return render_template("index.html", form=form)
 
+
+# ---- FEEDBACK ----
 @main_bp.route("/feedback/<int:ioc_id>", methods=["POST"])
 def feedback(ioc_id):
     feedback_value = request.form.get("feedback")
@@ -119,67 +156,66 @@ def feedback(ioc_id):
     return jsonify({"message": "Feedback saved"})
 
 
-@main_bp.route("/export/<fmt>")
-def export_results(fmt):
-    results = IOCResult.query.all()
-    if fmt == "csv":
+# ---- EXPORT ROUTES ----
+@main_bp.route("/export/<format>/<int:ioc_id>")
+def export(format, ioc_id):
+    """Export single result"""
+    result = IOCResult.query.get_or_404(ioc_id)
+    
+    if format == "json":
+        return jsonify({
+            "input": result.input_value,
+            "type": result.type,
+            "classification": result.classification,
+            "timestamp": result.timestamp.isoformat(),
+            "vt_report": result.vt_report,
+            "shodan_report": result.shodan_report,
+            "otx_report": result.otx_report
+        })
+    
+    elif format == "csv":
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(["id", "input_value", "type", "classification", "vt_report", "shodan_report", "scraped_data"])
-        for r in results:
-            writer.writerow([r.id, r.input_value, r.type, r.classification, json.dumps(r.vt_report), json.dumps(r.shodan_report), json.dumps(r.scraped_data)])
+        writer.writerow(["Input", "Type", "Classification", "Timestamp"])
+        writer.writerow([result.input_value, result.type, result.classification, result.timestamp])
+        
         output.seek(0)
-        return send_file(io.BytesIO(output.getvalue().encode()), mimetype="text/csv", as_attachment=True, download_name="ioc_results.csv")
-
-    elif fmt == "json":
-        return jsonify([{
-            "id": r.id,
-            "input_value": r.input_value,
-            "type": r.type,
-            "classification": r.classification,
-            "vt_report": r.vt_report,
-            "shodan_report": r.shodan_report,
-            "scraped_data": r.scraped_data
-        } for r in results])
-
-    return jsonify({"error": "Unsupported format"}), 400
+        return send_file(
+            io.BytesIO(output.getvalue().encode()),
+            mimetype="text/csv",
+            as_attachment=True,
+            download_name=f"threat_report_{ioc_id}.csv"
+        )
+    
+    return jsonify({"error": "Invalid format"}), 400
 
 
-@main_bp.route("/admin")
-def admin_dashboard():
-    malicious_count = IOCResult.query.filter_by(classification="Malicious").count()
-    benign_count = IOCResult.query.filter_by(classification="Benign").count()
-    info_count = IOCResult.query.filter_by(classification="Informational").count()
-    unknown_count = IOCResult.query.filter_by(classification="Unknown").count()
+# ---- HISTORY ----
+@main_bp.route("/history")
+def history():
+    """View search history"""
+    user_id = session.get("user_id")
+    if user_id:
+        results = IOCResult.query.filter_by(user_id=user_id).order_by(IOCResult.timestamp.desc()).all()
+    else:
+        results = IOCResult.query.order_by(IOCResult.timestamp.desc()).limit(50).all()
+    
+    return render_template("history.html", results=results)
 
-    return render_template("admin.html",
-        total_iocs=IOCResult.query.count(),
-        malicious_count=malicious_count,
-        benign_count=benign_count,
-        info_count=info_count,
-        unknown_count=unknown_count,
-        feedback_count=Feedback.query.count(),
-        chart_data=json.dumps({
-            "labels": ["Malicious", "Benign", "Informational", "Unknown"],
-            "values": [malicious_count, benign_count, info_count, unknown_count]
-        })
-    )
 
-@main_bp.route("/")
-def landing():
-    return render_template("landing.html")
-
-# Signup
+# ---- AUTH ROUTES (keep as is) ----
 @main_bp.route("/login", methods=["GET", "POST"])
 def login():
     form = LoginForm()
     if form.validate_on_submit():
-        user = User.query.filter_by(email=form.email.data).first()
+        user = User.query.filter_by(username=form.username.data).first()
         if user and check_password_hash(user.password, form.password.data):
+            session["user_id"] = user.id
+            session["username"] = user.username
             flash("Login successful!", "success")
             return redirect(url_for("main.index"))
         else:
-            flash("Invalid email or password", "danger")
+            flash("Invalid credentials", "danger")
     return render_template("login.html", form=form)
 
 
@@ -187,29 +223,21 @@ def login():
 def signup():
     form = SignupForm()
     if form.validate_on_submit():
-        existing_user = User.query.filter_by(email=form.email.data).first()
+        existing_user = User.query.filter_by(username=form.username.data).first()
         if existing_user:
-            flash("Email already registered", "danger")
+            flash("Username already exists", "danger")
         else:
-            new_user = User(
-                email=form.email.data,
-                password=generate_password_hash(form.password.data)
-            )
+            hashed_pw = generate_password_hash(form.password.data)
+            new_user = User(username=form.username.data, password=hashed_pw)
             db.session.add(new_user)
             db.session.commit()
-            flash("Signup successful! Please log in.", "success")
+            flash("Account created! Please login.", "success")
             return redirect(url_for("main.login"))
     return render_template("signup.html", form=form)
 
-# Dashboard
-@main_bp.route("/index")
-def dashboard():
-    if "user" in session:
-        return render_template("index.html", user=session["user"])
-    return redirect(url_for("main.login"))
 
-# Logout
 @main_bp.route("/logout")
 def logout():
-    session.pop("user", None)
-    return redirect(url_for("main.landing"))
+    session.clear()
+    flash("Logged out successfully", "info")
+    return redirect(url_for("main.index"))

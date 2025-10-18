@@ -1,131 +1,745 @@
-<!-- Tailwind CSS CDN -->
-<link href="https://cdn.jsdelivr.net/npm/tailwindcss@3.4.1/dist/tailwind.min.css" rel="stylesheet">
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Threat Intelligence Scanner</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            min-height: 100vh;
+            color: #e2e8f0;
+            padding: 0;
+            overflow-x: hidden;
+        }
+        
+        /* 3D Background Elements */
+        .bg-cubes {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            overflow: hidden;
+        }
+        
+        .cube {
+            position: absolute;
+            background: linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%);
+            opacity: 0.15;
+            transform-style: preserve-3d;
+            animation: float 20s infinite linear;
+        }
+        
+        .cube:nth-child(1) {
+            width: 100px;
+            height: 100px;
+            top: 10%;
+            left: 10%;
+            transform: rotate(45deg) translate3d(0, 0, 0);
+            background: linear-gradient(135deg, #4361ee 0%, #7209b7 100%);
+            animation-delay: 0s;
+        }
+        
+        .cube:nth-child(2) {
+            width: 150px;
+            height: 150px;
+            top: 60%;
+            left: 80%;
+            transform: rotate(20deg) translate3d(0, 0, 0);
+            background: linear-gradient(135deg, #f72585 0%, #b5179e 100%);
+            animation-delay: -5s;
+        }
+        
+        .cube:nth-child(3) {
+            width: 200px;
+            height: 200px;
+            top: 30%;
+            left: 60%;
+            transform: rotate(60deg) translate3d(0, 0, 0);
+            background: linear-gradient(135deg, #4cc9f0 0%, #4895ef 100%);
+            animation-delay: -10s;
+        }
+        
+        .cube:nth-child(4) {
+            width: 120px;
+            height: 120px;
+            top: 70%;
+            left: 20%;
+            transform: rotate(80deg) translate3d(0, 0, 0);
+            background: linear-gradient(135deg, #f9c74f 0%, #f9844a 100%);
+            animation-delay: -15s;
+        }
+        
+        @keyframes float {
+            0% {
+                transform: rotate(0deg) translate3d(0, 0, 0);
+            }
+            100% {
+                transform: rotate(360deg) translate3d(0, 0, 0);
+            }
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+            position: relative;
+            z-index: 1;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+            width: 100%;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .logo-icon {
+            font-size: 3rem;
+            color: #4361ee;
+            filter: drop-shadow(0 0 15px rgba(67, 97, 238, 0.5));
+        }
+        
+        h1 {
+            font-size: 3.2rem;
+            background: linear-gradient(135deg, #4361ee 0%, #4cc9f0 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 1rem;
+            font-weight: 800;
+            text-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .subtitle {
+            font-size: 1.3rem;
+            color: #cbd5e1;
+            margin-bottom: 3rem;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        /* 3D Card Styles */
+        .scanner-container {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3),
+                        0 0 0 1px rgba(255, 255, 255, 0.1);
+            padding: 3rem;
+            margin-bottom: 4rem;
+            transform: perspective(1000px) rotateX(5deg);
+            transition: transform 0.5s ease, box-shadow 0.5s ease;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .scanner-container:hover {
+            transform: perspective(1000px) rotateX(0deg) translateY(-10px);
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.4),
+                        0 0 0 1px rgba(255, 255, 255, 0.15);
+        }
+        
+        h2 {
+            font-size: 2rem;
+            background: linear-gradient(135deg, #4cc9f0 0%, #4361ee 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 2rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            font-weight: 700;
+        }
+        
+        .form-section {
+            width: 100%;
+        }
+        
+        .input-group {
+            margin-bottom: 2rem;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 1rem;
+            font-weight: 600;
+            color: #e2e8f0;
+            font-size: 1.2rem;
+        }
+        
+        .input-with-icon {
+            position: relative;
+        }
+        
+        .input-with-icon i {
+            position: absolute;
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #4cc9f0;
+            z-index: 2;
+        }
+        
+        input[type="text"] {
+            width: 100%;
+            padding: 1.5rem 1.5rem 1.5rem 4rem;
+            background: rgba(15, 23, 42, 0.7);
+            border: 2px solid rgba(76, 201, 240, 0.3);
+            border-radius: 15px;
+            font-size: 1.2rem;
+            transition: all 0.3s ease;
+            color: #e2e8f0;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #4cc9f0;
+            box-shadow: 0 0 0 3px rgba(76, 201, 240, 0.3),
+                        0 5px 20px rgba(76, 201, 240, 0.2);
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #4361ee 0%, #4cc9f0 100%);
+            color: white;
+            border: none;
+            padding: 1.5rem 3rem;
+            border-radius: 15px;
+            font-size: 1.2rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            box-shadow: 0 10px 20px rgba(67, 97, 238, 0.3),
+                        0 0 0 1px rgba(255, 255, 255, 0.1);
+        }
+        
+        .btn:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(67, 97, 238, 0.4),
+                        0 0 0 1px rgba(255, 255, 255, 0.15);
+        }
+        
+        .btn:active {
+            transform: translateY(-2px);
+        }
+        
+        .btn i {
+            font-size: 1.4rem;
+        }
+        
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 2.5rem;
+            margin-top: 3rem;
+        }
+        
+        .feature-card {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 2.5rem;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3),
+                        0 0 0 1px rgba(255, 255, 255, 0.1);
+            transition: all 0.4s ease;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            transform: perspective(1000px) rotateX(5deg);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .feature-card:hover {
+            transform: perspective(1000px) rotateX(0deg) translateY(-10px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4),
+                        0 0 0 1px rgba(255, 255, 255, 0.15);
+        }
+        
+        .feature-icon {
+            width: 80px;
+            height: 80px;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 2rem;
+            font-size: 2rem;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+            transform: perspective(500px) rotateY(15deg);
+            transition: transform 0.4s ease;
+        }
+        
+        .feature-card:hover .feature-icon {
+            transform: perspective(500px) rotateY(0deg);
+        }
+        
+        .recon-passive .feature-icon {
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+            color: white;
+        }
+        
+        .recon-active .feature-icon {
+            background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+            color: white;
+        }
+        
+        .recon-visual .feature-icon {
+            background: linear-gradient(135deg, #9f7aea 0%, #805ad5 100%);
+            color: white;
+        }
+        
+        .feature-card h3 {
+            font-size: 1.6rem;
+            margin-bottom: 1.5rem;
+            color: #e2e8f0;
+            font-weight: 700;
+        }
+        
+        .feature-card p {
+            color: #cbd5e1;
+            line-height: 1.7;
+            margin-bottom: 2rem;
+            flex-grow: 1;
+            font-size: 1.1rem;
+        }
+        
+        .learn-more {
+            color: #4cc9f0;
+            text-decoration: none;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            transition: all 0.3s ease;
+            font-size: 1.1rem;
+        }
+        
+        .learn-more:hover {
+            gap: 1.2rem;
+            color: #4361ee;
+        }
+        
+        footer {
+            margin-top: 5rem;
+            text-align: center;
+            color: #94a3b8;
+            font-size: 1rem;
+            padding: 2rem 0;
+        }
+        
+        /* Results Page Specific Styles */
+        .summary-card {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3),
+                        0 0 0 1px rgba(255, 255, 255, 0.1);
+            padding: 3rem;
+            margin-bottom: 3rem;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            transform: perspective(1000px) rotateX(5deg);
+            transition: transform 0.5s ease;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .summary-card:hover {
+            transform: perspective(1000px) rotateX(0deg);
+        }
+        
+        .summary-item {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .summary-label {
+            font-size: 1rem;
+            color: #94a3b8;
+            margin-bottom: 0.8rem;
+            font-weight: 600;
+        }
+        
+        .summary-value {
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: #e2e8f0;
+        }
+        
+        .classification {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.8rem 1.5rem;
+            border-radius: 100px;
+            font-weight: 700;
+            font-size: 1.2rem;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .malicious {
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+            color: white;
+        }
+        
+        .benign {
+            background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
+            color: white;
+        }
+        
+        .unknown {
+            background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+            color: white;
+        }
+        
+        .section-title {
+            font-size: 1.8rem;
+            background: linear-gradient(135deg, #4cc9f0 0%, #4361ee 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin: 3rem 0 2rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            font-weight: 700;
+        }
+        
+        .report-card {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3),
+                        0 0 0 1px rgba(255, 255, 255, 0.1);
+            padding: 2.5rem;
+            margin-bottom: 3rem;
+            transform: perspective(1000px) rotateX(5deg);
+            transition: transform 0.5s ease;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .report-card:hover {
+            transform: perspective(1000px) rotateX(0deg);
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stat-item {
+            text-align: center;
+            padding: 2rem;
+            border-radius: 15px;
+            background: rgba(15, 23, 42, 0.5);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            transform: perspective(500px) rotateY(10deg);
+            transition: transform 0.4s ease;
+        }
+        
+        .stat-item:hover {
+            transform: perspective(500px) rotateY(0deg);
+        }
+        
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 800;
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-label {
+            font-size: 1rem;
+            color: #94a3b8;
+            font-weight: 600;
+        }
+        
+        .malicious-stat {
+            color: #e74c3c;
+        }
+        
+        .suspicious-stat {
+            color: #f39c12;
+        }
+        
+        .undetected-stat {
+            color: #95a5a6;
+        }
+        
+        .harmless-stat {
+            color: #2ecc71;
+        }
+        
+        details {
+            margin-top: 2rem;
+        }
+        
+        summary {
+            cursor: pointer;
+            padding: 1.2rem;
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: 12px;
+            font-weight: 600;
+            color: #4cc9f0;
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s ease;
+        }
+        
+        summary:hover {
+            background: rgba(15, 23, 42, 0.7);
+        }
+        
+        summary::-webkit-details-marker {
+            display: none;
+        }
+        
+        summary::before {
+            content: '►';
+            font-size: 0.9rem;
+            transition: transform 0.3s ease;
+        }
+        
+        details[open] summary::before {
+            transform: rotate(90deg);
+        }
+        
+        .json-view {
+            max-height: 360px;
+            overflow: auto;
+            padding: 2rem;
+            background: rgba(15, 23, 42, 0.7);
+            color: #e2e8f0;
+            border-radius: 12px;
+            margin-top: 1.5rem;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.3);
+        }
+        
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 2.5rem;
+            margin: 4rem 0;
+        }
+        
+        .chart-container {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3),
+                        0 0 0 1px rgba(255, 255, 255, 0.1);
+            padding: 2rem;
+            height: 380px;
+            display: flex;
+            flex-direction: column;
+            transform: perspective(1000px) rotateX(5deg);
+            transition: transform 0.5s ease;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .chart-container:hover {
+            transform: perspective(1000px) rotateX(0deg);
+        }
+        
+        .chart-title {
+            font-size: 1.4rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            color: #e2e8f0;
+            text-align: center;
+        }
+        
+        .chart-wrapper {
+            flex-grow: 1;
+            position: relative;
+        }
+        
+        .no-data {
+            text-align: center;
+            padding: 3rem;
+            color: #94a3b8;
+            font-style: italic;
+            font-size: 1.1rem;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 1.5rem;
+            }
+            
+            h1 {
+                font-size: 2.5rem;
+            }
+            
+            .scanner-container, .feature-card, .summary-card, .report-card, .chart-container {
+                padding: 2rem;
+                transform: none;
+            }
+            
+            .features-grid, .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .chart-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .chart-container {
+                height: 320px;
+            }
+            
+            .cube {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-cubes">
+        <div class="cube"></div>
+        <div class="cube"></div>
+        <div class="cube"></div>
+        <div class="cube"></div>
+    </div>
+    
+    <div class="container">
+        <header>
+            <div class="logo">
+                <i class="fas fa-shield-alt logo-icon"></i>
+                <h1>Threat Intelligence Scanner</h1>
+            </div>
+            <p class="subtitle">Identify and analyze threats with our comprehensive IOC scanning tool. Enter any indicator of compromise to get started.</p>
+        </header>
+        
+        <div class="scanner-container">
+            <h2><i class="fas fa-search"></i> Input Data</h2>
+            <div class="form-section">
+                <form method="POST" enctype="multipart/form-data" action="{{ url_for('main.index') }}">
+                    {{ form.hidden_tag() }}
 
-<!-- Bootstrap CSS CDN -->
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-{% extends "base.html" %}
-{% block content %}
-<style>
-    body {
-        background-color: #f3f4f6;
-    }
-    /* Page styling */
-    body {
-        background: linear-gradient(135deg, #f8f9fa, #e9ecef);
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    }
+                    <div class="input-group">
+                        <label for="{{ form.input_data.id }}">Enter IOC (Keyword / Domain / IP):</label>
+                        <div class="input-with-icon">
+                            <i class="fas fa-search"></i>
+                            {{ form.input_data(
+                                placeholder="Enter IOC",
+                                class="form-control",
+                                id=form.input_data.id
+                            ) }}
+                        </div>
+                    </div>
+                    
 
-    h2 {
-        text-align: center;
-        margin-bottom: 20px;
-        font-weight: 600;
-        color: #343a40;
-    }
 
-    /* Form Section */
-    .form-section {
-        background: #fff;
-        padding: 25px;
-        border-radius: 16px;
-        box-shadow: 0 8px 20px rgba(0,0,0,0.08);
-        max-width: 600px;
-        margin: 0 auto 40px auto;
-        transition: transform 0.3s ease, box-shadow 0.3s ease;
-    }
-
-    .form-section:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 12px 28px rgba(0,0,0,0.12);
-    }
-
-    .form-control {
-        border-radius: 12px;
-        padding: 12px;
-        border: 1px solid #ced4da;
-        box-shadow: inset 0 2px 5px rgba(0,0,0,0.05);
-    }
-
-    .btn {
-        border-radius: 12px;
-        padding: 10px 20px;
-        font-weight: 500;
-        box-shadow: 0 4px 12px rgba(0,123,255,0.3);
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
-    }
-
-    .btn:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 18px rgba(0,123,255,0.4);
-    }
-
-    /* Cards Section */
-    .cards {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-        gap: 25px;
-        max-width: 1000px;
-        margin: 0 auto;
-        padding: 10px;
-    }
-
-    .card {
-        background: #ffffff;
-        border-radius: 20px;
-        padding: 25px;
-        text-align: center;
-        box-shadow: 0 8px 20px rgba(0,0,0,0.08);
-        transition: transform 0.3s ease, box-shadow 0.3s ease;
-    }
-
-    .card:hover {
-        transform: translateY(-10px) scale(1.02);
-        box-shadow: 0 15px 30px rgba(0,0,0,0.12);
-    }
-
-    .card h3 {
-        font-size: 1.4rem;
-        margin-bottom: 12px;
-        font-weight: 600;
-        color: #007bff;
-    }
-
-    .card p {
-        color: #555;
-        font-size: 0.95rem;
-        line-height: 1.5;
-    }
-</style>
-
-<h2>Input Data</h2>
-<div class="form-section">
-    <form method="POST" enctype="multipart/form-data" action="{{ url_for('main.index') }}">
-        {{ form.hidden_tag() }}
-
-        <label for="{{ form.input_data.id }}" class="form-label">
-            Enter IOC (Keyword / Domain / IP / Hash):
-        </label>
-        {{ form.input_data(
-            placeholder="🔍 Enter IOC",
-            class="form-control",
-            id=form.input_data.id
-        ) }}
-
-        <input type="submit" value="Scan" class="btn btn-primary mt-3 w-100">
-    </form>
+                    <button type="submit" class="btn">
+                        <i class="fas fa-play-circle"></i> Scan Now
+                    </button>
+    <div style="text-align:center;">
+    <a href="{{ url_for('main.history') }}" class="btn" style="margin-top:1.5rem; text-decoration:none; max-width:1000px; display:inline-block; text-align:center;">
+        <i class="fas fa-history"></i> View History
+    </a>
 </div>
+                </form>
+            </div>
+        </div>
+        
+        <div class="features-grid">
+            <div class="info-section">
+                <h2 style="margin-bottom:2.5rem; text-align:center; background: linear-gradient(135deg, #4cc9f0 0%, #4361ee 100%); background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size:2.2rem; font-weight:800;">
+                    For Your Information
+                </h2>
+                <p style="text-align:center; color:#cbd5e1; font-size:1.15rem; margin-bottom:2.2rem; max-width:700px; margin-left:auto; margin-right:auto;">
+                    <span style="font-family: 'Segoe UI', 'Montserrat', 'Poppins', sans-serif; font-size:1.25rem; font-weight:600; letter-spacing:0.5px; background: linear-gradient(90deg, #4cc9f0 0%, #4361ee 100%); background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-shadow: 0 2px 8px rgba(76,201,240,0.15);">
+                        The following modules are key features of the Threat Intelligence Scanner. Each provides a unique approach to gathering and visualizing threat data, helping you stay informed and secure.
+                    </span>
+                </p>
+                <div class="features-grid-inner" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(350px, 1fr)); gap:2.5rem;">
+                    <div class="feature-card recon-passive">
+                        <div class="feature-icon">
+                            <i class="fas fa-binoculars"></i>
+                        </div>
+                        <h3>Multi-Source IOC Analysis</h3>
+                         <p>Analyze IPs, domains, URLs, hashes, and keywords using VirusTotal, Shodan, and AlienVault OTX. Get comprehensive threat intelligence from multiple trusted sources in one scan.</p>
+                        <a href="#" class="learn-more">
+                            Learn more <i class="fas fa-arrow-right"></i>
+                        </a>
+                    </div>
+                    <div class="feature-card recon-active">
+                        <div class="feature-icon">
+                            <i class="fas fa-bullseye"></i>
+                        </div>
+                        <h3>AI-Powered Classification</h3>
+                       <p>Random Forest machine learning model automatically classifies threats as Malicious, Benign, or Informational based on real-time API data and historical patterns.</p>
+                        <a href="#" class="learn-more">
+                            Learn more <i class="fas fa-arrow-right"></i>
+                        </a>
+                    </div>
+                    <div class="feature-card recon-visual">
+                        <div class="feature-icon">
+                            <i class="fas fa-chart-pie"></i>
+                        </div>
+                        <h3>Interactive Reports & History</h3>
+                         <p>Visualize threat data with interactive charts, view detailed JSON reports, track search history, and export results in CSV, JSON, Excel, or PDF formats.</p>
+                        <a href="#" class="learn-more">
+                            Learn more <i class="fas fa-arrow-right"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <footer>
+            <p>© 2025 Threat Intelligence Scanner</p>
+        </footer>
+    </div>
 
-<div class="cards">
-    <div class="card">
-        <h3>Passive Recon</h3>
-        <p>Gather DNS, WHOIS, Netcraft, and other public data without alerting the target.</p>
-    </div>
-    <div class="card">
-        <h3>Active Recon</h3>
-        <p>Perform targeted scans using Nmap, Shodan, or banner grabbing.</p>
-    </div>
-    <div class="card">
-        <h3>Visual Reports</h3>
-        <p>Data displayed as charts for domains, IPs, and threat indicators.</p>
-    </div>
-</div>
-{% endblock %}
+    <script>
+        // Simple animation for the input field
+        document.addEventListener('DOMContentLoaded', function() {
+            const inputField = document.querySelector('input[type="text"]');
+            const submitBtn = document.querySelector('.btn');
+            
+            inputField.addEventListener('focus', function() {
+                this.parentElement.parentElement.style.transform = 'scale(1.02)';
+            });
+            
+            inputField.addEventListener('blur', function() {
+                this.parentElement.parentElement.style.transform = 'scale(1)';
+            });
+            
+            submitBtn.addEventListener('mouseenter', function() {
+                this.style.transform = 'translateY(-5px)';
+            });
+            
+            submitBtn.addEventListener('mouseleave', function() {
+                this.style.transform = 'translateY(0)';
+            });
+        });
+    </script>
+</body>
+</html>

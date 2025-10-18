@@ -14,3 +14,7 @@ venv/
 *.log
 .idea/
 .vscode/
+
+# Ignore database and virtual environment
+instance/database.db
+venv/

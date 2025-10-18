@@ -1,9 +1,11 @@
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf import CSRFProtect
+from flask_migrate import Migrate  # ✅ Add this
 
 db = SQLAlchemy()
 csrf = CSRFProtect()
+migrate = Migrate()  # ✅ Add this
 
 def create_app():
     app = Flask(__name__, template_folder="templates")
@@ -13,6 +15,7 @@ def create_app():
 
     db.init_app(app)
     csrf.init_app(app)
+    migrate.init_app(app, db)  # ✅ Add this
 
     from app.routes import main_bp
     app.register_blueprint(main_bp)
@@ -21,4 +24,3 @@ def create_app():
         db.create_all()
 
     return app
-
