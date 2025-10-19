@@ -39,5 +39,5 @@ python-dateutil==2.8.2
 certifi==2023.11.17
 urllib3==2.1.0
 
-openai==1.6.1                    # OpenAI GPT integration
+google-generativeai>=0.3.0                  # Gemini integration
 python-whois==0.8.0              # WHOIS lookups
