@@ -566,7 +566,11 @@
                 <span>Web Scraper For Data Extraction and Threat Intelligence</span>
             </div>
             <div class="navbar-user">
+                <a href="{{ url_for('main.dashboard') }}" class="btn btn-secondary">
+                        <i class="fas fa-chart-line"></i> Dashboard
+                    </a>
                 <div class="user-info">
+                    
                     <i class="fas fa-user-circle"></i>
                     <span class="user-email">{{ session.get('username', 'User') }}</span>
                 </div>

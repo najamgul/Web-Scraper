@@ -1,0 +1,370 @@
+# app/llm_service.py
+"""
+LLM Service for generating threat explanations
+Supports Google Gemini Pro and local models (Ollama)
+"""
+import os
+import logging
+import json
+from app.prompts import build_threat_prompt
+
+logger = logging.getLogger(__name__)
+
+# Configuration
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
+LLM_PROVIDER = os.getenv('LLM_PROVIDER', 'gemini')  # 'gemini' or 'ollama'
+LLM_MODEL = os.getenv('LLM_MODEL', 'gemini-pro')  # or 'gemini-1.5-pro'
+ENABLE_ENRICHMENT = os.getenv('ENABLE_ENRICHMENT', 'true').lower() == 'true'
+
+
+def generate_threat_explanation(context):
+    """
+    Generate AI-powered explanation of threat
+    
+    Args:
+        context (dict): Aggregated threat context from all sources
+    
+    Returns:
+        dict: Structured explanation
+    """
+    if not ENABLE_ENRICHMENT:
+        logger.info("Enrichment disabled via config")
+        return get_fallback_explanation(context)
+    
+    try:
+        if LLM_PROVIDER == 'gemini' and GEMINI_API_KEY:
+            return generate_with_gemini(context)
+        elif LLM_PROVIDER == 'ollama':
+            return generate_with_ollama(context)
+        else:
+            logger.warning("No LLM provider configured, using fallback")
+            return get_fallback_explanation(context)
+    
+    except Exception as e:
+        logger.error(f"LLM generation error: {e}")
+        return get_fallback_explanation(context)
+
+
+def generate_with_gemini(context):
+    """
+    Generate explanation using Google Gemini Pro
+    """
+    try:
+        import google.generativeai as genai
+        
+        # Configure Gemini
+        genai.configure(api_key=GEMINI_API_KEY)
+        
+        # Initialize model
+        model = genai.GenerativeModel(LLM_MODEL)
+        
+        # Build prompt
+        prompt = build_threat_prompt(context)
+        
+        logger.info(f"Calling Gemini API with model: {LLM_MODEL}")
+        
+        # Generate content with safety settings
+        generation_config = {
+            'temperature': 0.3,  # Low temperature for factual responses
+            'top_p': 0.8,
+            'top_k': 40,
+            'max_output_tokens': 1024,
+        }
+        
+        # Safety settings to allow security content
+        safety_settings = [
+            {
+                "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                "threshold": "BLOCK_NONE"
+            },
+            {
+                "category": "HARM_CATEGORY_HARASSMENT",
+                "threshold": "BLOCK_ONLY_HIGH"
+            },
+            {
+                "category": "HARM_CATEGORY_HATE_SPEECH",
+                "threshold": "BLOCK_ONLY_HIGH"
+            },
+            {
+                "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                "threshold": "BLOCK_ONLY_HIGH"
+            }
+        ]
+        
+        response = model.generate_content(
+            prompt,
+            generation_config=generation_config,
+            safety_settings=safety_settings
+        )
+        
+        # Extract text from response
+        content = response.text
+        logger.info(f"Gemini response received ({len(content)} chars)")
+        
+        # Try to parse as JSON, fallback to text
+        try:
+            # Remove markdown code blocks if present
+            content_clean = content.strip()
+            if content_clean.startswith('```json'):
+                content_clean = content_clean[7:]
+            if content_clean.startswith('```'):
+                content_clean = content_clean[3:]
+            if content_clean.endswith('```'):
+                content_clean = content_clean[:-3]
+            content_clean = content_clean.strip()
+            
+            parsed = json.loads(content_clean)
+            
+            # Validate required fields
+            if not all(key in parsed for key in ['summary', 'explanation', 'indicators', 'recommendation']):
+                logger.warning("Gemini response missing required fields, parsing as text")
+                return parse_text_response(content, context)
+            
+            # Ensure confidence field exists
+            if 'confidence' not in parsed:
+                parsed['confidence'] = 'Medium'
+            
+            return parsed
+            
+        except json.JSONDecodeError as e:
+            logger.warning(f"Response is not valid JSON ({e}), parsing as text")
+            return parse_text_response(content, context)
+    
+    except ImportError:
+        logger.error("Google Generative AI package not installed. Run: pip install google-generativeai")
+        return get_fallback_explanation(context)
+    
+    except Exception as e:
+        logger.error(f"Gemini API error: {e}")
+        # Check if it's a safety filter issue
+        if "safety" in str(e).lower():
+            logger.warning("Gemini safety filters triggered, using fallback")
+        return get_fallback_explanation(context)
+
+
+def generate_with_ollama(context):
+    """
+    Generate explanation using local Ollama model
+    """
+    try:
+        import requests
+        
+        prompt = build_threat_prompt(context)
+        
+        logger.info(f"Calling Ollama API with model: {LLM_MODEL}")
+        
+        response = requests.post(
+            'http://localhost:11434/api/generate',
+            json={
+                'model': LLM_MODEL,
+                'prompt': prompt,
+                'stream': False
+            },
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            content = response.json().get('response', '')
+            logger.info(f"Ollama response received ({len(content)} chars)")
+            
+            try:
+                parsed = json.loads(content)
+                return parsed
+            except:
+                return parse_text_response(content, context)
+        else:
+            logger.error(f"Ollama API error: {response.status_code}")
+            return get_fallback_explanation(context)
+    
+    except Exception as e:
+        logger.error(f"Ollama error: {e}")
+        return get_fallback_explanation(context)
+
+
+def parse_text_response(text, context):
+    """
+    Parse plain text LLM response into structured format
+    """
+    try:
+        lines = text.strip().split('\n')
+        
+        summary = ""
+        explanation = ""
+        indicators = []
+        recommendation = ""
+        confidence = "Medium"
+        
+        current_section = None
+        
+        for line in lines:
+            line = line.strip()
+            
+            # Skip empty lines
+            if not line:
+                continue
+            
+            # Detect sections
+            line_lower = line.lower()
+            if 'summary' in line_lower and ':' in line:
+                current_section = 'summary'
+                # Extract content after colon
+                if ':' in line:
+                    summary = line.split(':', 1)[1].strip()
+                continue
+            elif 'explanation' in line_lower or 'why' in line_lower or 'dangerous' in line_lower or 'safe' in line_lower:
+                if ':' in line:
+                    current_section = 'explanation'
+                    explanation = line.split(':', 1)[1].strip() + ' '
+                    continue
+                current_section = 'explanation'
+            elif 'indicator' in line_lower or 'finding' in line_lower or 'key' in line_lower:
+                current_section = 'indicators'
+                continue
+            elif 'recommendation' in line_lower or 'action' in line_lower:
+                if ':' in line:
+                    current_section = 'recommendation'
+                    recommendation = line.split(':', 1)[1].strip() + ' '
+                    continue
+                current_section = 'recommendation'
+            elif 'confidence' in line_lower:
+                if 'high' in line_lower:
+                    confidence = 'High'
+                elif 'low' in line_lower:
+                    confidence = 'Low'
+                continue
+            
+            # Append to current section
+            if current_section == 'summary':
+                summary += line + ' '
+            elif current_section == 'explanation':
+                explanation += line + ' '
+            elif current_section == 'indicators':
+                # Clean up list markers
+                cleaned = line.lstrip('-•*123456789.').strip()
+                if cleaned and len(cleaned) > 5:  # Avoid adding section headers
+                    indicators.append(cleaned)
+            elif current_section == 'recommendation':
+                recommendation += line + ' '
+        
+        # Fallbacks
+        if not summary:
+            summary = text[:200] + '...' if len(text) > 200 else text
+        
+        if not explanation:
+            explanation = text
+        
+        if not indicators:
+            indicators = ['Analysis based on multiple threat intelligence sources']
+        
+        if not recommendation:
+            recommendation = get_default_recommendation(context.get('classification', 'Unknown'))
+        
+        return {
+            'summary': summary.strip(),
+            'explanation': explanation.strip(),
+            'indicators': indicators[:5],  # Limit to 5 indicators
+            'recommendation': recommendation.strip(),
+            'confidence': confidence
+        }
+    
+    except Exception as e:
+        logger.error(f"Error parsing text response: {e}")
+        return get_fallback_explanation(context)
+
+
+def get_fallback_explanation(context):
+    """
+    Generate rule-based explanation when LLM is unavailable
+    """
+    classification = context.get('classification', 'Unknown')
+    ioc_value = context.get('ioc_value', '')
+    ioc_type = context.get('ioc_type', '')
+    
+    vt_summary = context.get('vt_summary', '')
+    shodan_summary = context.get('shodan_summary', '')
+    otx_summary = context.get('otx_summary', '')
+    
+    # Build summary
+    summary = f"This {ioc_type} ({ioc_value}) has been classified as {classification} based on multi-source threat intelligence analysis."
+    
+    # Build explanation
+    explanation_parts = []
+    
+    if vt_summary and 'no data' not in vt_summary.lower() and 'not available' not in vt_summary.lower():
+        explanation_parts.append(f"VirusTotal Analysis: {vt_summary}")
+    
+    if shodan_summary and 'no data' not in shodan_summary.lower() and 'not available' not in shodan_summary.lower():
+        explanation_parts.append(f"Network Exposure: {shodan_summary}")
+    
+    if otx_summary and 'no data' not in otx_summary.lower() and 'not available' not in otx_summary.lower():
+        explanation_parts.append(f"Threat Intelligence: {otx_summary}")
+    
+    explanation = '\n\n'.join(explanation_parts) if explanation_parts else "Limited threat data available for comprehensive analysis. This assessment is based on available threat intelligence sources."
+    
+    # Build indicators
+    indicators = []
+    
+    if classification == 'Malicious':
+        indicators = [
+            f"Multiple security vendors flagged this {ioc_type} as malicious",
+            "Detected in active threat intelligence feeds",
+            "Associated with known malicious activity",
+            "High-confidence malicious classification"
+        ]
+    elif classification == 'Benign':
+        indicators = [
+            "No malicious indicators detected across security vendors",
+            "Clean reputation in threat intelligence databases",
+            "No suspicious network activity detected",
+            "Safe to allow in most security contexts"
+        ]
+    elif classification == 'Suspicious':
+        indicators = [
+            "Some suspicious indicators detected",
+            "Limited threat intelligence available",
+            "Warrants further investigation",
+            "Consider monitoring or temporary blocking"
+        ]
+    else:
+        indicators = [
+            f"Classification: {classification}",
+            "Insufficient threat intelligence data",
+            "Manual review recommended",
+            "Gather additional context before taking action"
+        ]
+    
+    # Recommendation
+    recommendation = get_default_recommendation(classification)
+    
+    # Confidence
+    confidence = 'Medium'
+    sources_count = sum([
+        1 for s in [vt_summary, shodan_summary, otx_summary] 
+        if s and 'no data' not in s.lower() and 'not available' not in s.lower()
+    ])
+    
+    if sources_count >= 2:
+        confidence = 'High'
+    elif sources_count == 0:
+        confidence = 'Low'
+    
+    return {
+        'summary': summary,
+        'explanation': explanation,
+        'indicators': indicators,
+        'recommendation': recommendation,
+        'confidence': confidence
+    }
+
+
+def get_default_recommendation(classification):
+    """Get default recommendation based on classification"""
+    recommendations = {
+        'Malicious': 'BLOCK IMMEDIATELY. Add to firewall deny list and EDR block rules. Investigate all systems that have communicated with this indicator. Review logs for signs of compromise and lateral movement.',
+        'Suspicious': 'MONITOR CLOSELY. Implement heightened logging and alerting. Consider temporary blocking based on risk tolerance. Investigate source and context. Track for additional malicious indicators.',
+        'Benign': 'ALLOW. No immediate action required. Continue standard security monitoring. Maintain awareness as part of normal security operations.',
+        'Informational': 'REVIEW CONTEXT. Evaluate against security policies and risk framework. May be legitimate but warrants analyst review. Consider adding to watch list.',
+        'Unknown': 'INSUFFICIENT DATA. Gather additional threat intelligence before making security decisions. Consider sandboxing or temporary monitoring. Escalate to security analyst for manual review.'
+    }
+    
+    return recommendations.get(classification, 'Manual security review and threat analysis recommended before taking action.')

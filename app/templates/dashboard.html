@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Threat Intelligence Dashboard</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            min-height: 100vh;
+            color: #e2e8f0;
+        }
+        
+        /* Navbar */
+        .navbar {
+            background: rgba(30, 41, 59, 0.95);
+            padding: 1rem 2rem;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        .navbar-brand {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #4361ee 0%, #4cc9f0 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .navbar-links a {
+            color: #cbd5e1;
+            text-decoration: none;
+            margin-left: 2rem;
+            transition: color 0.3s;
+        }
+        
+        .navbar-links a:hover {
+            color: #4cc9f0;
+        }
+        
+        /* Container */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+        
+        .stat-card {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 2rem;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: transform 0.3s;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .stat-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-label {
+            color: #94a3b8;
+            font-size: 1rem;
+        }
+        
+        .malicious-card { border-left: 4px solid #e74c3c; }
+        .malicious-card .stat-icon { color: #e74c3c; }
+        .benign-card { border-left: 4px solid #2ecc71; }
+        .benign-card .stat-icon { color: #2ecc71; }
+        .total-card { border-left: 4px solid #4cc9f0; }
+        .total-card .stat-icon { color: #4cc9f0; }
+        .recent-card { border-left: 4px solid #f39c12; }
+        .recent-card .stat-icon { color: #f39c12; }
+        
+        /* Charts Grid */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+        
+        .chart-card {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 2rem;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .chart-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            color: #e2e8f0;
+        }
+        
+        .chart-wrapper {
+            position: relative;
+            height: 300px;
+        }
+        
+        /* Table Styles */
+        .threat-table {
+            background: rgba(30, 41, 59, 0.8);
+            border-radius: 15px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th {
+            background: rgba(15, 23, 42, 0.6);
+            padding: 1rem;
+            text-align: left;
+            color: #4cc9f0;
+            font-weight: 600;
+        }
+        
+        td {
+            padding: 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        tr:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        
+        .badge {
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        
+        .badge-malicious { background: #e74c3c; color: white; }
+        .badge-suspicious { background: #f39c12; color: white; }
+        .badge-benign { background: #2ecc71; color: white; }
+        
+        /* Live Feed */
+        .live-feed {
+            background: rgba(30, 41, 59, 0.8);
+            border-radius: 15px;
+            padding: 2rem;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        
+        .feed-item {
+            background: rgba(15, 23, 42, 0.5);
+            padding: 1rem;
+            border-radius: 10px;
+            margin-bottom: 1rem;
+            border-left: 3px solid #4361ee;
+        }
+        
+        .feed-item.malicious { border-left-color: #e74c3c; }
+        .feed-item.suspicious { border-left-color: #f39c12; }
+        
+        .feed-time {
+            color: #94a3b8;
+            font-size: 0.85rem;
+        }
+        
+        /* Map Container */
+        #geoMap {
+            height: 400px;
+            border-radius: 15px;
+            overflow: hidden;
+        }
+        
+        @media (max-width: 768px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="navbar-brand">
+            <i class="fas fa-chart-line"></i> Threat Intelligence Dashboard
+        </div>
+        <div class="navbar-links">
+            <a href="{{ url_for('main.index') }}"><i class="fas fa-search"></i> Scanner</a>
+            <a href="{{ url_for('main.history') }}"><i class="fas fa-history"></i> History</a>
+            <a href="{{ url_for('main.logout') }}"><i class="fas fa-sign-out-alt"></i> Logout</a>
+        </div>
+    </nav>
+    
+    <div class="container">
+        <!-- Stats Overview -->
+        <div class="stats-grid">
+            <div class="stat-card total-card">
+                <div class="stat-icon"><i class="fas fa-database"></i></div>
+                <div class="stat-value">{{ stats.total_scans if stats else 0 }}</div>
+                <div class="stat-label">Total Scans</div>
+            </div>
+            
+            <div class="stat-card malicious-card">
+                <div class="stat-icon"><i class="fas fa-exclamation-triangle"></i></div>
+                <div class="stat-value">{{ stats.malicious if stats else 0 }}</div>
+                <div class="stat-label">Malicious Detections</div>
+            </div>
+            
+            <div class="stat-card benign-card">
+                <div class="stat-icon"><i class="fas fa-shield-alt"></i></div>
+                <div class="stat-value">{{ stats.benign if stats else 0 }}</div>
+                <div class="stat-label">Benign Results</div>
+            </div>
+            
+            <div class="stat-card recent-card">
+                <div class="stat-icon"><i class="fas fa-clock"></i></div>
+                <div class="stat-value">{{ stats.recent_scans_24h if stats else 0 }}</div>
+                <div class="stat-label">Last 24 Hours</div>
+            </div>
+        </div>
+        
+        <!-- Charts Row 1 -->
+        <div class="charts-grid">
+            <!-- Classification Pie Chart -->
+            <div class="chart-card">
+                <h3 class="chart-title"><i class="fas fa-chart-pie"></i> Threat Classification</h3>
+                <div class="chart-wrapper">
+                    <canvas id="classificationChart"></canvas>
+                </div>
+            </div>
+            
+            <!-- Timeline Chart -->
+            <div class="chart-card">
+                <h3 class="chart-title"><i class="fas fa-chart-line"></i> 30-Day Threat Timeline</h3>
+                <div class="chart-wrapper">
+                    <canvas id="timelineChart"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Charts Row 2 -->
+        <div class="charts-grid">
+            <!-- Top Malicious IPs -->
+            <div class="chart-card">
+                <h3 class="chart-title"><i class="fas fa-chart-bar"></i> Top Malicious IPs</h3>
+                <div class="chart-wrapper">
+                    <canvas id="topIPsChart"></canvas>
+                </div>
+            </div>
+            
+            <!-- Geographic Distribution -->
+            <div class="chart-card">
+                <h3 class="chart-title"><i class="fas fa-globe"></i> Geographic Distribution</h3>
+                <div class="chart-wrapper">
+                    <canvas id="geoChart"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Tables and Live Feed -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 2rem;">
+            <!-- Top Malicious Domains Table -->
+            <div class="threat-table">
+                <h3 class="chart-title"><i class="fas fa-list"></i> Top Malicious Domains/URLs</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Domain/URL</th>
+                            <th>Type</th>
+                            <th>Count</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for domain in top_domains[:10] %}
+                        <tr>
+                            <td>{{ domain._id[:50] }}...</td>
+                            <td>{{ domain.type }}</td>
+                            <td>{{ domain.count }}</td>
+                            <td><span class="badge badge-{{ domain.classification.lower() }}">{{ domain.classification }}</span></td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="4" style="text-align:center; color:#94a3b8;">No data available</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Live Threat Feed -->
+            <div class="live-feed">
+                <h3 class="chart-title"><i class="fas fa-rss"></i> Live Threat Feed</h3>
+                <div id="threatFeed">
+                    {% for threat in recent_threats %}
+                    <div class="feed-item {{ threat.classification.lower() }}">
+                        <div style="display: flex; justify-content: space-between;">
+                            <strong>{{ threat.input }}</strong>
+                            <span class="badge badge-{{ threat.classification.lower() }}">{{ threat.classification }}</span>
+                        </div>
+                        <div class="feed-time">{{ threat.type }} • {{ threat.timestamp[:19] if threat.timestamp else 'N/A' }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Classification Pie Chart
+        const classificationCtx = document.getElementById('classificationChart').getContext('2d');
+        new Chart(classificationCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Malicious', 'Benign', 'Suspicious', 'Informational', 'Unknown'],
+                datasets: [{
+                    data: [
+                        {{ stats.malicious if stats else 0 }},
+                        {{ stats.benign if stats else 0 }},
+                        {{ stats.suspicious if stats else 0 }},
+                        {{ stats.informational if stats else 0 }},
+                        {{ stats.unknown if stats else 0 }}
+                    ],
+                    backgroundColor: ['#e74c3c', '#2ecc71', '#f39c12', '#3498db', '#95a5a6']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom', labels: { color: '#e2e8f0' } }
+                }
+            }
+        });
+        
+        // Timeline Chart
+        const timelineData = {{ timeline | safe }};
+        const dates = Object.keys(timelineData).sort();
+        const maliciousData = dates.map(d => timelineData[d].Malicious);
+        const benignData = dates.map(d => timelineData[d].Benign);
+        
+        const timelineCtx = document.getElementById('timelineChart').getContext('2d');
+        new Chart(timelineCtx, {
+            type: 'line',
+            data: {
+                labels: dates,
+                datasets: [{
+                    label: 'Malicious',
+                    data: maliciousData,
+                    borderColor: '#e74c3c',
+                    backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                    tension: 0.4
+                }, {
+                    label: 'Benign',
+                    data: benignData,
+                    borderColor: '#2ecc71',
+                    backgroundColor: 'rgba(46, 204, 113, 0.1)',
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom', labels: { color: '#e2e8f0' } }
+                },
+                scales: {
+                    x: { ticks: { color: '#e2e8f0' }, grid: { color: 'rgba(255,255,255,0.1)' } },
+                    y: { ticks: { color: '#e2e8f0' }, grid: { color: 'rgba(255,255,255,0.1)' } }
+                }
+            }
+        });
+        
+        // Top IPs Chart
+        const topIPsCtx = document.getElementById('topIPsChart').getContext('2d');
+        new Chart(topIPsCtx, {
+            type: 'bar',
+            data: {
+                labels: [{% for ip in top_ips %}'{{ ip._id }}'{% if not loop.last %},{% endif %}{% endfor %}],
+                datasets: [{
+                    label: 'Detections',
+                    data: [{% for ip in top_ips %}{{ ip.count }}{% if not loop.last %},{% endif %}{% endfor %}],
+                    backgroundColor: '#e74c3c'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { ticks: { color: '#e2e8f0' }, grid: { color: 'rgba(255,255,255,0.1)' } },
+                    y: { ticks: { color: '#e2e8f0' }, grid: { color: 'rgba(255,255,255,0.1)' } }
+                }
+            }
+        });
+        
+        // Geographic Chart
+        const geoData = {{ geo_data | safe }};
+        const geoCtx = document.getElementById('geoChart').getContext('2d');
+        new Chart(geoCtx, {
+            type: 'bar',
+            data: {
+                labels: geoData.map(g => g.country),
+                datasets: [{
+                    label: 'Threats by Country',
+                    data: geoData.map(g => g.count),
+                    backgroundColor: '#4cc9f0'
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { ticks: { color: '#e2e8f0' }, grid: { color: 'rgba(255,255,255,0.1)' } },
+                    y: { ticks: { color: '#e2e8f0' }, grid: { color: 'rgba(255,255,255,0.1)' } }
+                }
+            }
+        });
+        
+        // Auto-refresh threat feed every 30 seconds
+        setInterval(() => {
+            fetch('/api/threats/recent?limit=20')
+                .then(res => res.json())
+                .then(threats => {
+                    const feedContainer = document.getElementById('threatFeed');
+                    feedContainer.innerHTML = threats.map(t => `
+                        <div class="feed-item ${t.classification.toLowerCase()}">
+                            <div style="display: flex; justify-content: space-between;">
+                                <strong>${t.input}</strong>
+                                <span class="badge badge-${t.classification.toLowerCase()}">${t.classification}</span>
+                            </div>
+                            <div class="feed-time">${t.type} • ${t.timestamp ? t.timestamp.substring(0, 19) : 'N/A'}</div>
+                        </div>
+                    `).join('');
+                });
+        }, 30000);
+    </script>
+</body>
+</html>

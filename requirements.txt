@@ -34,3 +34,10 @@ lxml==4.9.3
 
 # Utilities
 python-dateutil==2.8.2
+
+# SSL and Networking
+certifi==2023.11.17
+urllib3==2.1.0
+
+openai==1.6.1                    # OpenAI GPT integration
+python-whois==0.8.0              # WHOIS lookups

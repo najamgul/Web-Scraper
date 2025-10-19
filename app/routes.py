@@ -4,6 +4,7 @@ import re
 import json
 import csv
 import io
+from app.enrichment import enrich_threat_intelligence
 from flask import session, Blueprint, render_template, request, jsonify, send_file, redirect, url_for, flash
 import pandas as pd
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
@@ -12,6 +13,16 @@ from io import BytesIO
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 from bson import ObjectId
+from app.analytics import (
+    get_dashboard_stats,
+    get_top_malicious_ips,
+    get_top_malicious_domains,
+    get_geolocation_data,
+    get_threat_timeline,
+    get_recent_threats,
+    get_classification_breakdown,
+    get_top_threat_tags
+)
 
 from app.scraper import google_cse_search
 from app.vt_shodan_api import vt_lookup_domain, vt_lookup_ip, vt_lookup_url, shodan_lookup
@@ -30,7 +41,51 @@ from reportlab.lib import colors
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill
 
+# Add to routes.py after imports
 
+def format_otx_for_display(otx_data):
+    """
+    Format OTX data for template display
+    """
+    if not otx_data or 'error' in otx_data:
+        return None
+    
+    details = otx_data.get('details', {})
+    
+    # Extract key information
+    formatted = {
+        'threat_score': otx_data.get('threat_score', 0),
+        'classification': otx_data.get('classification', 'Unknown'),
+        'source_count': otx_data.get('source_count', 0),
+        'summary': details.get('summary', 'No summary available'),
+        'risk_level': details.get('risk_level', 'Unknown'),
+        
+        # Lists and counts
+        'pulses': details.get('pulses', 0),
+        'malicious_indicators': details.get('malicious_indicators', 0),
+        'malicious_reports': details.get('malicious_reports', 0),
+        
+        # Arrays
+        'malware_families': details.get('malware_families', []),
+        'attack_techniques': details.get('attack_techniques', []),
+        'top_tags': details.get('top_tags', []),
+        'adversaries': details.get('adversaries', []),
+        'top_pulses': details.get('top_pulses', []),
+        
+        # Location (for IPs)
+        'country': details.get('country', ''),
+        'city': details.get('city', ''),
+        'asn': details.get('asn', ''),
+        
+        # Other
+        'reputation': details.get('reputation', 0),
+        'vulnerabilities': details.get('vulnerabilities', 0),
+        
+        # Raw data
+        'raw': otx_data
+    }
+    
+    return formatted
 main_bp = Blueprint("main", __name__)
 
 
@@ -113,6 +168,15 @@ def index():
             ioc_type=ioc_type,
             user_input=user_input
         )
+        # ✅ NEW: Generate AI enrichment
+        enrichment = enrich_threat_intelligence(
+            ioc_value=user_input,
+            ioc_type=ioc_type,
+            vt_data=vt_data,
+            shodan_data=shodan_data,
+            otx_data=otx_data,
+            classification=classification
+            )
 
         # --- Save to MongoDB ---
         user_ref = None
@@ -130,6 +194,7 @@ def index():
             otx_report=otx_data,
             scraped_data=scraped_data,
             classification=classification,
+            enrichment_context=enrichment,
             user_id=user_ref,
             timestamp=datetime.utcnow()
         )
@@ -146,19 +211,23 @@ def index():
             ]
         }
 
-        return render_template("results.html", results={
-            "ioc_id": str(ioc_result.id),
-            "input": user_input,
-            "type": ioc_type,
-            "vt": vt_data,
-            "shodan": shodan_data,
-            "otx": otx_data,
-            "scraped": scraped_data,
-            "classification": classification
-        }, chart_data=json.dumps(chart_data))
-
+        return render_template(
+            "results.html", 
+            results={
+                "ioc_id": str(ioc_result.id),
+                "input": user_input,
+                "type": ioc_type,
+                "vt": vt_data,
+                "shodan": shodan_data,
+                "otx": otx_data,
+                "otx_formatted": format_otx_for_display(otx_data),
+                "scraped": scraped_data,
+                "classification": classification,
+                "enrichment": enrichment 
+            }, 
+            chart_data=json.dumps(chart_data)
+        )
     return render_template("index.html", form=form)
-
 
 # ---- FEEDBACK (Protected) ----
 @main_bp.route("/feedback/<ioc_id>", methods=["POST"])
@@ -516,7 +585,54 @@ def signup():
     
     return render_template("signup.html", form=form)
 
+# ---- DASHBOARD (Protected) ----
+@main_bp.route("/dashboard")
+@login_required
+def dashboard():
+    """
+    Threat Correlation Dashboard
+    """
+    try:
+        # Get all dashboard data
+        stats = get_dashboard_stats()
+        top_ips = get_top_malicious_ips(limit=10)
+        top_domains = get_top_malicious_domains(limit=10)
+        geo_data = get_geolocation_data()
+        timeline = get_threat_timeline(days=30)
+        recent_threats = get_recent_threats(limit=20)
+        classification_breakdown = get_classification_breakdown()
+        top_tags = get_top_threat_tags(limit=15)
+        
+        return render_template(
+            'dashboard.html',
+            stats=stats,
+            top_ips=top_ips,
+            top_domains=top_domains,
+            geo_data=json.dumps(geo_data),
+            timeline=json.dumps(timeline),
+            recent_threats=recent_threats,
+            classification_breakdown=classification_breakdown,
+            top_tags=top_tags
+        )
+    except Exception as e:
+        logger.error(f"Dashboard error: {e}")
+        flash("Error loading dashboard", "danger")
+        return redirect(url_for('main.index'))
 
+
+# ---- API ENDPOINT: Real-time Threat Feed ----
+@main_bp.route("/api/threats/recent")
+@login_required
+def api_recent_threats():
+    """
+    API endpoint for real-time threat feed updates
+    """
+    try:
+        limit = request.args.get('limit', 20, type=int)
+        recent = get_recent_threats(limit=limit)
+        return jsonify(recent)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 # ---- LOGOUT ----
 @main_bp.route("/logout")
 def logout():

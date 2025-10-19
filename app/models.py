@@ -26,7 +26,7 @@ class IOCResult(Document):
     timestamp = DateTimeField(default=datetime.utcnow)
     
     user_id = ReferenceField(User, reverse_delete_rule=CASCADE)
-    
+    enrichment_context = DictField()
     def to_dict(self):
         """Helper method for JSON serialization"""
         return {
@@ -38,6 +38,7 @@ class IOCResult(Document):
             'shodan_report': self.shodan_report,
             'otx_report': self.otx_report,
             'scraped_data': self.scraped_data,
+            'enrichment_context': self.enrichment_context,
             'timestamp': self.timestamp.isoformat() if self.timestamp else None,
             'user_id': str(self.user_id.id) if self.user_id else None
         }

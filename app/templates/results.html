@@ -500,6 +500,201 @@
             </div>
         </div>
         
+        <!-- ========================================= -->
+        <!-- ✅ AI THREAT CONTEXT ENRICHMENT SECTION -->
+        <!-- ========================================= -->
+        {% if results.enrichment and results.enrichment.summary %}
+        <div style="
+            background: linear-gradient(135deg, rgba(67, 97, 238, 0.15) 0%, rgba(76, 201, 240, 0.15) 100%);
+            border-left: 5px solid #4361ee;
+            border-radius: 20px;
+            padding: 3rem;
+            margin: 3rem 0;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            transform: perspective(1000px) rotateX(5deg);
+            transition: transform 0.5s ease;
+            border: 1px solid rgba(67, 97, 238, 0.3);
+        " onmouseover="this.style.transform='perspective(1000px) rotateX(0deg)'" 
+           onmouseout="this.style.transform='perspective(1000px) rotateX(5deg)'">
+            
+            <h2 style="
+                color: #4cc9f0;
+                font-size: 2rem;
+                margin-bottom: 2rem;
+                display: flex;
+                align-items: center;
+                gap: 1rem;
+            ">
+                <i class="fas fa-brain"></i> AI Threat Analysis
+                {% if results.enrichment.sources_analyzed %}
+                <span style="
+                    font-size: 0.8rem;
+                    background: rgba(76, 201, 240, 0.2);
+                    padding: 0.3rem 0.8rem;
+                    border-radius: 20px;
+                    color: #4cc9f0;
+                    border: 1px solid rgba(76, 201, 240, 0.3);
+                ">
+                    <i class="fas fa-check-circle"></i> {{ results.enrichment.sources_analyzed|join(', ') }}
+                </span>
+                {% endif %}
+            </h2>
+            
+            <!-- Summary -->
+            <div style="
+                font-size: 1.2rem;
+                margin-bottom: 2.5rem;
+                padding: 1.5rem;
+                background: rgba(255, 255, 255, 0.05);
+                border-radius: 12px;
+                line-height: 1.8;
+                box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            ">
+                <i class="fas fa-quote-left" style="color: #4cc9f0; opacity: 0.5; margin-right: 0.5rem;"></i>
+                {{ results.enrichment.summary }}
+                <i class="fas fa-quote-right" style="color: #4cc9f0; opacity: 0.5; margin-left: 0.5rem;"></i>
+            </div>
+            
+            <!-- Why Malicious/Benign -->
+            <div style="
+                background: rgba(15, 23, 42, 0.6);
+                padding: 2rem;
+                border-radius: 15px;
+                margin-bottom: 2.5rem;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+            ">
+                <h3 style="
+                    color: {% if results.classification == 'Malicious' %}#e74c3c{% elif results.classification == 'Benign' %}#2ecc71{% else %}#f39c12{% endif %};
+                    font-size: 1.5rem;
+                    margin-bottom: 1.5rem;
+                    display: flex;
+                    align-items: center;
+                    gap: 0.8rem;
+                ">
+                    {% if results.classification == 'Malicious' %}
+                        <i class="fas fa-exclamation-triangle"></i> Why is this dangerous?
+                    {% elif results.classification == 'Benign' %}
+                        <i class="fas fa-shield-check"></i> Why is this safe?
+                    {% else %}
+                        <i class="fas fa-info-circle"></i> Analysis Details
+                    {% endif %}
+                </h3>
+                <div style="
+                    white-space: pre-line;
+                    line-height: 1.8;
+                    color: #e2e8f0;
+                ">
+                    {{ results.enrichment.why_malicious }}
+                </div>
+            </div>
+            
+            <!-- Key Indicators -->
+            {% if results.enrichment.key_indicators %}
+            <div style="margin-bottom: 2.5rem;">
+                <h3 style="
+                    color: #f39c12;
+                    font-size: 1.5rem;
+                    margin-bottom: 1.5rem;
+                    display: flex;
+                    align-items: center;
+                    gap: 0.8rem;
+                ">
+                    <i class="fas fa-list-check"></i> Key Threat Indicators
+                </h3>
+                <div style="
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+                    gap: 1rem;
+                ">
+                    {% for indicator in results.enrichment.key_indicators %}
+                    <div style="
+                        background: rgba(243, 156, 18, 0.1);
+                        padding: 1.2rem;
+                        border-left: 3px solid #f39c12;
+                        border-radius: 8px;
+                        display: flex;
+                        align-items: start;
+                        gap: 1rem;
+                        transition: all 0.3s ease;
+                    " onmouseover="this.style.background='rgba(243, 156, 18, 0.2)'" 
+                       onmouseout="this.style.background='rgba(243, 156, 18, 0.1)'">
+                        <i class="fas fa-check-circle" style="color: #f39c12; margin-top: 0.2rem; font-size: 1.2rem;"></i>
+                        <span>{{ indicator }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Recommendation -->
+            <div style="
+                background: {% if results.classification == 'Malicious' %}rgba(231, 76, 60, 0.15){% elif results.classification == 'Benign' %}rgba(46, 204, 113, 0.15){% else %}rgba(243, 156, 18, 0.15){% endif %};
+                padding: 2rem;
+                border-radius: 15px;
+                border: 2px solid {% if results.classification == 'Malicious' %}rgba(231, 76, 60, 0.4){% elif results.classification == 'Benign' %}rgba(46, 204, 113, 0.4){% else %}rgba(243, 156, 18, 0.4){% endif %};
+            ">
+                <h3 style="
+                    color: {% if results.classification == 'Malicious' %}#e74c3c{% elif results.classification == 'Benign' %}#2ecc71{% else %}#f39c12{% endif %};
+                    font-size: 1.5rem;
+                    margin-bottom: 1.5rem;
+                    display: flex;
+                    align-items: center;
+                    gap: 0.8rem;
+                ">
+                    <i class="fas fa-shield-alt"></i> Recommended Action
+                </h3>
+                <p style="
+                    font-size: 1.1rem;
+                    font-weight: 600;
+                    line-height: 1.8;
+                    color: #e2e8f0;
+                ">
+                    {{ results.enrichment.recommendation }}
+                </p>
+                
+                <div style="
+                    margin-top: 1.5rem;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding-top: 1.5rem;
+                    border-top: 1px solid rgba(255, 255, 255, 0.1);
+                    flex-wrap: wrap;
+                    gap: 1rem;
+                ">
+                    <div>
+                        <strong style="color: #94a3b8;">Confidence Level:</strong>
+                        <span style="
+                            color: {% if results.enrichment.confidence == 'High' %}#2ecc71{% elif results.enrichment.confidence == 'Low' %}#e74c3c{% else %}#f39c12{% endif %};
+                            font-weight: 700;
+                            margin-left: 0.5rem;
+                            font-size: 1.1rem;
+                        ">
+                            {{ results.enrichment.confidence }}
+                        </span>
+                    </div>
+                    
+                    {% if results.enrichment.risk_score is defined %}
+                    <div>
+                        <strong style="color: #94a3b8;">Risk Score:</strong>
+                        <span style="
+                            font-size: 1.3rem;
+                            font-weight: 700;
+                            margin-left: 0.5rem;
+                            color: {% if results.enrichment.risk_score >= 70 %}#e74c3c{% elif results.enrichment.risk_score >= 40 %}#f39c12{% else %}#2ecc71{% endif %};
+                        ">
+                            {{ results.enrichment.risk_score }}/100
+                        </span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        <!-- ========================================= -->
+        <!-- END AI THREAT CONTEXT ENRICHMENT         -->
+        <!-- ========================================= -->
+        
         <h2 class="section-title"><i class="fas fa-shield-virus"></i> VirusTotal Report</h2>
         
         {% set vt = results.vt or {} %}
@@ -590,22 +785,251 @@
             {% endif %}
         </div>
         
-        <!-- ✅ ALIENVAULT OTX REPORT (NEW SECTION) -->
         <h2 class="section-title"><i class="fas fa-database"></i> AlienVault OTX Threat Intelligence</h2>
-        
-        {% set otx = results.otx or {} %}
-        
+
+        {% set otx_fmt = results.otx_formatted %}
+
         <div class="report-card">
-            {% if otx %}
-            <details open>
-                <summary>View AlienVault OTX Report</summary>
-                <pre class="json-view">{{ otx | tojson(indent=2) }}</pre>
-            </details>
+            {% if otx_fmt %}
+                <!-- Threat Score Progress Bar -->
+                <div style="margin-bottom: 3rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <span style="font-size: 1.2rem; font-weight: 600; color: #4cc9f0;">
+                            <i class="fas fa-exclamation-triangle"></i> Threat Score
+                        </span>
+                        <span style="font-size: 1.5rem; font-weight: 700; color: #e2e8f0;">
+                            {{ otx_fmt.threat_score }}/100
+                        </span>
+                    </div>
+                    <div style="background: rgba(15, 23, 42, 0.7); border-radius: 50px; height: 30px; overflow: hidden; box-shadow: inset 0 2px 10px rgba(0,0,0,0.3);">
+                        <div style="
+                            height: 100%; 
+                            width: {{ otx_fmt.threat_score }}%; 
+                            background: {% if otx_fmt.threat_score >= 70 %}linear-gradient(90deg, #e74c3c, #c0392b)
+                            {% elif otx_fmt.threat_score >= 40 %}linear-gradient(90deg, #f39c12, #e67e22)
+                            {% elif otx_fmt.threat_score >= 10 %}linear-gradient(90deg, #3498db, #2980b9)
+                            {% else %}linear-gradient(90deg, #2ecc71, #27ae60){% endif %};
+                            transition: width 1s ease;
+                            display: flex;
+                            align-items: center;
+                            justify-content: flex-end;
+                            padding-right: 15px;
+                            color: white;
+                            font-weight: 600;
+                        "></div>
+                    </div>
+                </div>
+
+                <!-- Summary Card -->
+                <div style="background: rgba(67, 97, 238, 0.1); border-left: 4px solid #4361ee; padding: 1.5rem; border-radius: 12px; margin-bottom: 2.5rem;">
+                    <p style="font-size: 1.1rem; color: #e2e8f0; margin: 0;">
+                        <i class="fas fa-info-circle" style="color: #4cc9f0; margin-right: 0.5rem;"></i>
+                        {{ otx_fmt.summary }}
+                    </p>
+                </div>
+
+                <!-- Stats Grid -->
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value" style="color: 
+                            {% if otx_fmt.classification.lower() == 'malicious' %}#e74c3c
+                            {% elif otx_fmt.classification.lower() == 'suspicious' %}#f39c12
+                            {% elif otx_fmt.classification.lower() == 'informational' %}#3498db
+                            {% else %}#2ecc71{% endif %};">
+                            {{ otx_fmt.classification }}
+                        </div>
+                        <div class="stat-label">Classification</div>
+                    </div>
+
+                    <div class="stat-item">
+                        <div class="stat-value" style="color: 
+                            {% if otx_fmt.risk_level == 'Critical' %}#e74c3c
+                            {% elif otx_fmt.risk_level == 'High' %}#f39c12
+                            {% elif otx_fmt.risk_level == 'Medium' %}#3498db
+                            {% else %}#2ecc71{% endif %};">
+                            {{ otx_fmt.risk_level }}
+                        </div>
+                        <div class="stat-label">Risk Level</div>
+                    </div>
+
+                    <div class="stat-item">
+                        <div class="stat-value" style="color: #4cc9f0;">
+                            {{ otx_fmt.source_count }}
+                        </div>
+                        <div class="stat-label">Threat Pulses</div>
+                    </div>
+
+                    {% if otx_fmt.malicious_indicators > 0 or otx_fmt.malicious_reports > 0 %}
+                    <div class="stat-item">
+                        <div class="stat-value malicious-stat">
+                            {{ otx_fmt.malicious_indicators or otx_fmt.malicious_reports }}
+                        </div>
+                        <div class="stat-label">Malicious Indicators</div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Malware Families -->
+                {% if otx_fmt.malware_families %}
+                <div style="margin-top: 2.5rem; padding: 2rem; background: rgba(15, 23, 42, 0.5); border-radius: 15px;">
+                    <h4 style="color: #e74c3c; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.8rem;">
+                        <i class="fas fa-virus"></i> Malware Families Detected
+                    </h4>
+                    <div style="display: flex; flex-wrap: wrap; gap: 1rem;">
+                        {% for family in otx_fmt.malware_families[:10] %}
+                        <span style="
+                            background: linear-gradient(135deg, #e74c3c, #c0392b);
+                            color: white;
+                            padding: 0.6rem 1.2rem;
+                            border-radius: 20px;
+                            font-size: 0.95rem;
+                            font-weight: 600;
+                            box-shadow: 0 4px 10px rgba(231, 76, 60, 0.3);
+                        ">
+                            <i class="fas fa-bug"></i> {{ family }}
+                        </span>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Attack Techniques -->
+                {% if otx_fmt.attack_techniques %}
+                <div style="margin-top: 2.5rem; padding: 2rem; background: rgba(15, 23, 42, 0.5); border-radius: 15px;">
+                    <h4 style="color: #f39c12; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.8rem;">
+                        <i class="fas fa-crosshairs"></i> ATT&CK Techniques
+                    </h4>
+                    <div style="display: flex; flex-wrap: wrap; gap: 1rem;">
+                        {% for technique in otx_fmt.attack_techniques[:10] %}
+                        <span style="
+                            background: linear-gradient(135deg, #f39c12, #e67e22);
+                            color: white;
+                            padding: 0.6rem 1.2rem;
+                            border-radius: 20px;
+                            font-size: 0.95rem;
+                            font-weight: 600;
+                            box-shadow: 0 4px 10px rgba(243, 156, 18, 0.3);
+                        ">
+                            {{ technique }}
+                        </span>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Top Tags -->
+                {% if otx_fmt.top_tags %}
+                <div style="margin-top: 2.5rem; padding: 2rem; background: rgba(15, 23, 42, 0.5); border-radius: 15px;">
+                    <h4 style="color: #4cc9f0; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.8rem;">
+                        <i class="fas fa-tags"></i> Threat Tags
+                    </h4>
+                    <div style="display: flex; flex-wrap: wrap; gap: 0.8rem;">
+                        {% for tag in otx_fmt.top_tags[:15] %}
+                        <span style="
+                            background: rgba(76, 201, 240, 0.2);
+                            color: #4cc9f0;
+                            padding: 0.5rem 1rem;
+                            border-radius: 15px;
+                            font-size: 0.9rem;
+                            border: 1px solid rgba(76, 201, 240, 0.3);
+                        ">
+                            #{{ tag }}
+                        </span>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Top Threat Pulses -->
+                {% if otx_fmt.top_pulses %}
+                <div style="margin-top: 2.5rem; padding: 2rem; background: rgba(15, 23, 42, 0.5); border-radius: 15px;">
+                    <h4 style="color: #9f7aea; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.8rem;">
+                        <i class="fas fa-stream"></i> Recent Threat Pulses
+                    </h4>
+                    <div style="display: flex; flex-direction: column; gap: 1.2rem;">
+                        {% for pulse in otx_fmt.top_pulses[:5] %}
+                        <div style="
+                            background: rgba(30, 41, 59, 0.6);
+                            padding: 1.5rem;
+                            border-radius: 12px;
+                            border-left: 3px solid #9f7aea;
+                            transition: all 0.3s ease;
+                        " onmouseover="this.style.background='rgba(30, 41, 59, 0.8)'" onmouseout="this.style.background='rgba(30, 41, 59, 0.6)'">
+                            <div style="font-size: 1.1rem; font-weight: 600; color: #e2e8f0; margin-bottom: 0.5rem;">
+                                {{ pulse.name }}
+                            </div>
+                            <div style="display: flex; gap: 2rem; font-size: 0.9rem; color: #94a3b8;">
+                                <span><i class="fas fa-calendar"></i> {{ pulse.created[:10] if pulse.created else 'N/A' }}</span>
+                                <span><i class="fas fa-user"></i> {{ pulse.author }}</span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Location Info (for IPs) -->
+                {% if otx_fmt.country %}
+                <div style="margin-top: 2.5rem; padding: 2rem; background: rgba(15, 23, 42, 0.5); border-radius: 15px;">
+                    <h4 style="color: #48bb78; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.8rem;">
+                        <i class="fas fa-globe-americas"></i> Geolocation
+                    </h4>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem;">
+                        <div>
+                            <div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 0.5rem;">Country</div>
+                            <div style="color: #e2e8f0; font-size: 1.1rem; font-weight: 600;">{{ otx_fmt.country }}</div>
+                        </div>
+                        {% if otx_fmt.city %}
+                        <div>
+                            <div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 0.5rem;">City</div>
+                            <div style="color: #e2e8f0; font-size: 1.1rem; font-weight: 600;">{{ otx_fmt.city }}</div>
+                        </div>
+                        {% endif %}
+                        {% if otx_fmt.asn %}
+                        <div>
+                            <div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 0.5rem;">ASN</div>
+                            <div style="color: #e2e8f0; font-size: 1.1rem; font-weight: 600;">{{ otx_fmt.asn }}</div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Adversaries -->
+                {% if otx_fmt.adversaries %}
+                <div style="margin-top: 2.5rem; padding: 2rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 15px;">
+                    <h4 style="color: #ef4444; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.8rem;">
+                        <i class="fas fa-user-secret"></i> Known Adversaries
+                    </h4>
+                    <div style="display: flex; flex-wrap: wrap; gap: 1rem;">
+                        {% for adversary in otx_fmt.adversaries[:5] %}
+                        <span style="
+                            background: rgba(239, 68, 68, 0.2);
+                            color: #ef4444;
+                            padding: 0.8rem 1.5rem;
+                            border-radius: 20px;
+                            font-size: 1rem;
+                            font-weight: 600;
+                            border: 1px solid rgba(239, 68, 68, 0.4);
+                        ">
+                            {{ adversary }}
+                        </span>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Raw JSON (Collapsible) -->
+                <details style="margin-top: 3rem;">
+                    <summary>View Raw OTX JSON Data</summary>
+                    <pre class="json-view">{{ otx_fmt.raw | tojson(indent=2) }}</pre>
+                </details>
+
             {% else %}
-            <div class="no-data">
-                <i class="fas fa-info-circle" style="font-size: 3rem; margin-bottom: 1.5rem;"></i>
-                <p>No AlienVault OTX data available</p>
-            </div>
+                <div class="no-data">
+                    <i class="fas fa-info-circle" style="font-size: 3rem; margin-bottom: 1.5rem;"></i>
+                    <p>No AlienVault OTX data available</p>
+                </div>
             {% endif %}
         </div>
         
@@ -624,6 +1048,7 @@
             {% endif %}
         </div>
         
+        
         <div class="chart-grid">
             <div class="chart-container">
                 <div class="chart-title">Classification Overview</div>
@@ -639,6 +1064,15 @@
                 </div>
             </div>
             
+            {% if otx_fmt %}
+            <div class="chart-container">
+                <div class="chart-title">OTX Threat Analysis</div>
+                <div class="chart-wrapper">
+                    <canvas id="otxChart"></canvas>
+                </div>
+            </div>
+            {% endif %}
+            
             <div class="chart-container">
                 <div class="chart-title">Overall History (All Results)</div>
                 <div class="chart-wrapper">
@@ -647,7 +1081,6 @@
             </div>
         </div>
 
-        <!-- ✅ FIXED EXPORT LINKS -->
         <div class="export-links">
             <h3 style="margin-bottom: 1.5rem; color: #e2e8f0;">Export Results</h3>
             <a href="{{ url_for('main.export', format='csv', ioc_id=results.ioc_id) }}">
@@ -656,7 +1089,7 @@
             <a href="{{ url_for('main.export', format='json', ioc_id=results.ioc_id) }}">
                 <i class="fas fa-file-code"></i> Export JSON
             </a>
-            <a href="{{ url_for('main.export', format='xlsx', ioc_id=results.ioc_id) }}">
+            <a href="{{ url_for('main.export', format='excel', ioc_id=results.ioc_id) }}">
                 <i class="fas fa-file-excel"></i> Export Excel
             </a>
             <a href="{{ url_for('main.export', format='pdf', ioc_id=results.ioc_id) }}">
@@ -794,6 +1227,72 @@
         document.getElementById('overallPie').parentElement.innerHTML = 
             '<div class="no-data"><p>No historical data available</p></div>';
     }
+
+    // OTX Threat Analysis Doughnut Chart
+    const otx_fmt_js = JSON.parse('{{ otx_fmt | default({}) | tojson | safe }}');
+    const otxExists = otx_fmt_js && Object.keys(otx_fmt_js).length > 0;
+
+    if (otxExists) {
+        const otxThreatScore = Number(otx_fmt_js.threat_score || 0);
+        const otxPulses = Number(otx_fmt_js.source_count || 0);
+        const otxMalicious = Number(otx_fmt_js.malicious_indicators || otx_fmt_js.malicious_reports || 0);
+
+        new Chart(document.getElementById('otxChart'), {
+            type: 'doughnut',
+            data: {
+                labels: ['Threat Score', 'Safe Score'],
+                datasets: [{
+                    data: [otxThreatScore, 100 - otxThreatScore],
+                    backgroundColor: [
+                        otxThreatScore >= 70 ? '#e74c3c' :
+                        otxThreatScore >= 40 ? '#f39c12' :
+                        otxThreatScore >= 10 ? '#3498db' : '#2ecc71',
+                        'rgba(148, 163, 184, 0.2)'
+                    ],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                cutout: '70%',
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            color: '#e2e8f0',
+                            font: { size: 14 }
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.label + ': ' + context.parsed + '/100';
+                            }
+                        }
+                    }
+                }
+            },
+            plugins: [{
+                beforeDraw: function(chart) {
+                    const ctx = chart.ctx;
+                    const width = chart.width;
+                    const height = chart.height;
+                    ctx.restore();
+                    const fontSize = (height / 80).toFixed(2);
+                    ctx.font = fontSize + "em sans-serif";
+                    ctx.textBaseline = "middle";
+                    ctx.fillStyle = "#e2e8f0";
+                    const text = otxThreatScore + "/100";
+                    const textX = Math.round((width - ctx.measureText(text).width) / 2);
+                    const textY = height / 2;
+                    ctx.fillText(text, textX, textY);
+                    ctx.save();
+                }
+            }]
+        });
+    }
     </script>
+    
 </body>
 </html>
