@@ -1,26 +1,37 @@
+# __init__.py
 from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
 from flask_wtf import CSRFProtect
-from flask_migrate import Migrate  # ✅ Add this
+from mongoengine import connect
+from dotenv import load_dotenv
+import os
 
-db = SQLAlchemy()
+# Load environment variables
+load_dotenv()
+
 csrf = CSRFProtect()
-migrate = Migrate()  # ✅ Add this
+db = None  # Kept for compatibility
 
 def create_app():
     app = Flask(__name__, template_folder="templates")
-    app.config["SECRET_KEY"] = "your_secret_key"
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///database.db"
-    app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-
-    db.init_app(app)
+    
+    # Load config from environment variables
+    app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "fallback-secret-key")
+    app.config["MONGODB_URI"] = os.getenv("MONGODB_URI")
+    
+    # Optional Flask configs
+    app.config["DEBUG"] = os.getenv("FLASK_DEBUG", "False") == "True"
+    
+    # Connect to MongoDB Atlas
+    try:
+        connect(host=app.config["MONGODB_URI"])
+        print("✅ Connected to MongoDB Atlas")
+    except Exception as e:
+        print(f"❌ MongoDB connection failed: {e}")
+        raise
+    
     csrf.init_app(app)
-    migrate.init_app(app, db)  # ✅ Add this
 
     from app.routes import main_bp
     app.register_blueprint(main_bp)
-
-    with app.app_context():
-        db.create_all()
 
     return app

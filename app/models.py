@@ -1,41 +1,50 @@
 # models.py
 from app import db
 from datetime import datetime
+from mongoengine import Document, StringField, DateTimeField, DictField, ListField, IntField, ReferenceField, CASCADE
 
-
-class IOCResult(db.Model):
-    __tablename__ = "ioc_results"
-    id = db.Column(db.Integer, primary_key=True)
-    input_value = db.Column(db.String(255), nullable=False)
-    type = db.Column(db.String(50), nullable=False)
-    classification = db.Column(db.String(50), nullable=False)
-    vt_report = db.Column(db.JSON, nullable=True)
-    shodan_report = db.Column(db.JSON, nullable=True)
-    otx_report = db.Column(db.JSON, nullable=True)  # ✅ Changed from abusix_report
-    scraped_data = db.Column(db.JSON, nullable=True)
-
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
-
-    feedbacks = db.relationship("Feedback", back_populates="ioc_result", cascade="all, delete-orphan")
-
-
-class Feedback(db.Model):
-    __tablename__ = "feedback"
-    id = db.Column(db.Integer, primary_key=True)
-    ioc_id = db.Column(db.Integer, db.ForeignKey("ioc_results.id"), nullable=False)
-    correct_classification = db.Column(db.String(50), nullable=False)
-
-    ioc_result = db.relationship("IOCResult", back_populates="feedbacks")
-
-
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    password = db.Column(db.String(200), nullable=False)
-
-    ioc_results = db.relationship("IOCResult", backref="user", lazy=True)
-
+class User(Document):
+    meta = {'collection': 'users'}
+    
+    email = StringField(required=True, unique=True, max_length=120)
+    password = StringField(required=True, max_length=200)
+    
     def __repr__(self):
         return f"<User {self.email}>"
+
+
+class IOCResult(Document):
+    meta = {'collection': 'ioc_results'}
+    
+    input_value = StringField(required=True, max_length=255)
+    type = StringField(required=True, max_length=50)
+    classification = StringField(required=True, max_length=50)
+    vt_report = DictField()
+    shodan_report = DictField()
+    otx_report = DictField()
+    scraped_data = ListField()
+    timestamp = DateTimeField(default=datetime.utcnow)
+    
+    user_id = ReferenceField(User, reverse_delete_rule=CASCADE)
+    
+    def to_dict(self):
+        """Helper method for JSON serialization"""
+        return {
+            'id': str(self.id),
+            'input_value': self.input_value,
+            'type': self.type,
+            'classification': self.classification,
+            'vt_report': self.vt_report,
+            'shodan_report': self.shodan_report,
+            'otx_report': self.otx_report,
+            'scraped_data': self.scraped_data,
+            'timestamp': self.timestamp.isoformat() if self.timestamp else None,
+            'user_id': str(self.user_id.id) if self.user_id else None
+        }
+
+
+class Feedback(Document):
+    meta = {'collection': 'feedback'}
+    
+    ioc_id = ReferenceField(IOCResult, required=True, reverse_delete_rule=CASCADE)
+    correct_classification = StringField(required=True, max_length=50)

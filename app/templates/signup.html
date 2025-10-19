@@ -69,8 +69,15 @@
 
             <div class="form-group">
                 {{ form.password.label }}
-                {{ form.password(placeholder="Create a password") }}
+                {{ form.password(placeholder="Create a password (min 8 characters)") }}
                 {% for error in form.password.errors %}<div class="flash danger">{{ error }}</div>{% endfor %}
+            </div>
+
+            <!-- ✅ ADDED: Confirm Password Field -->
+            <div class="form-group">
+                {{ form.confirm_password.label }}
+                {{ form.confirm_password(placeholder="Re-enter your password") }}
+                {% for error in form.confirm_password.errors %}<div class="flash danger">{{ error }}</div>{% endfor %}
             </div>
 
             {{ form.submit(class="btn") }}
