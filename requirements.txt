@@ -41,3 +41,6 @@ urllib3==2.1.0
 
 google-generativeai>=0.3.0                  # Gemini integration
 python-whois==0.8.0              # WHOIS lookups
+
+
+gunicorn==21.2.0
