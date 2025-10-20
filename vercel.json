@@ -1,5 +1,5 @@
 {
-  "version": 2,
-  "builds": [{ "src": "app.py", "use": "@vercel/python" }],
-  "routes": [{ "src": "/(.*)", "dest": "app.py" }]
+  "builds": [{ "src": "run.py", "use": "@vercel/python" }],
+  "routes": [{ "src": "/(.*)", "dest": "run.py" }],
+  "installCommand": "pip install -r vercel_requirements.txt"
 }
