@@ -5,6 +5,11 @@ from mongoengine import connect
 from dotenv import load_dotenv
 import os
 
+# app/__init__.py
+
+app = Flask(__name__)
+from app import routes  # if you have routes.py
+
 # Load environment variables
 load_dotenv()
 
