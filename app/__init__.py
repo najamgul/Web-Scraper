@@ -8,13 +8,15 @@ import os
 # app/__init__.py
 
 app = Flask(__name__)
-from app import routes  # if you have routes.py
+  # if you have routes.py
 
 # Load environment variables
 load_dotenv()
 
 csrf = CSRFProtect()
 db = None  # Kept for compatibility
+
+
 
 def create_app():
     app = Flask(__name__, template_folder="templates")
@@ -38,5 +40,7 @@ def create_app():
 
     from app.routes import main_bp
     app.register_blueprint(main_bp)
+    
+    from app import routes
 
     return app
