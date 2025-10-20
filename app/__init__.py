@@ -37,10 +37,10 @@ def create_app():
         raise
     
     csrf.init_app(app)
-
+    from app import routes
     from app.routes import main_bp
     app.register_blueprint(main_bp)
     
-    from app import routes
+    
 
     return app
