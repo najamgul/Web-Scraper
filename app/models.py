@@ -1,5 +1,5 @@
 # models.py
-from app import db
+from . import db
 from datetime import datetime
 from mongoengine import Document, StringField, DateTimeField, DictField, ListField, IntField, ReferenceField, CASCADE
 
