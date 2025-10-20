@@ -1,0 +1,17 @@
+# Ignore Python virtual environment
+.venv
+venv
+__pycache__
+*.pyc
+
+# Ignore local configs
+.env
+.DS_Store
+
+# Ignore cache or build folders
+node_modules
+.git
+.gitignore
+__pypackages__
+.venv
+venv
