@@ -16,6 +16,7 @@ venv
 *.log
 .idea/
 .vscode/
+.git
 
 # Ignore database and virtual environment
 instance/database.db
