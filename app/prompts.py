@@ -11,54 +11,52 @@ def build_threat_prompt(context):
     ioc_value = context.get('ioc_value', '')
     ioc_type = context.get('ioc_type', '')
     classification = context.get('classification', 'Unknown')
-    vt_summary = context.get('vt_summary', '')
-    shodan_summary = context.get('shodan_summary', '')
-    otx_summary = context.get('otx_summary', '')
-    whois_summary = context.get('whois_summary', '')
+    vt_summary = context.get('vt_summary', 'No data available')
+    shodan_summary = context.get('shodan_summary', 'No data available')
+    otx_summary = context.get('otx_summary', 'No data available')
+    whois_summary = context.get('whois_summary', 'No data available')
     
-    prompt = f"""Analyze this security threat and provide a clear explanation for a cybersecurity analyst.
+    prompt = f"""You are a cybersecurity threat analyst. Analyze this indicator of compromise.
 
-INDICATOR OF COMPROMISE (IOC):
+**CRITICAL: Your response MUST be ONLY valid JSON. Do NOT use markdown code blocks. Do NOT add any text before or after the JSON.**
+
+INDICATOR DETAILS:
 - Value: {ioc_value}
 - Type: {ioc_type}
 - Classification: {classification}
 
-DATA SOURCES:
+THREAT INTELLIGENCE DATA:
 
-VirusTotal Analysis:
-{vt_summary}
+VirusTotal: {vt_summary}
 
-Network Exposure (Shodan):
-{shodan_summary}
+Shodan: {shodan_summary}
 
-Threat Intelligence (AlienVault OTX):
-{otx_summary}
+AlienVault OTX: {otx_summary}
 
-Registration Information (WHOIS):
-{whois_summary}
+WHOIS: {whois_summary}
 
-TASK:
-Provide a structured analysis in the following JSON format:
+Return your analysis in this EXACT JSON structure (no markdown, no code blocks):
 
 {{
-  "summary": "One-sentence summary of the threat",
-  "explanation": "2-3 paragraph explanation of why this is {classification.lower()} and what makes it dangerous (or safe)",
+  "summary": "Brief one-sentence assessment",
+  "explanation": "Detailed 2-3 paragraph explanation of why this is classified as {classification} based on the intelligence data. Include specific findings and technical details.",
   "indicators": [
-    "Key finding 1",
-    "Key finding 2",
-    "Key finding 3"
+    "Specific finding from the data",
+    "Another concrete indicator",
+    "Third relevant finding"
   ],
-  "recommendation": "Specific action to take (block, monitor, allow, investigate)",
-  "confidence": "High/Medium/Low based on data quality"
+  "recommendation": "Specific actionable security recommendation (BLOCK/MONITOR/ALLOW with reasoning)",
+  "confidence": "High"
 }}
 
-Focus on:
-1. Being concise but informative
-2. Explaining technical findings in clear language
-3. Providing actionable recommendations
-4. Only stating facts supported by the data provided
+Requirements:
+- Base analysis ONLY on the provided data
+- Use "High", "Medium", or "Low" for confidence
+- Include 3-5 specific indicators
+- Escape any quotes in strings with backslash
+- Return pure JSON only - NO markdown, NO ```json blocks, NO extra text
 
-Respond ONLY with the JSON object, no additional text."""
+Your JSON response:"""
     
     return prompt
 
@@ -83,36 +81,44 @@ def build_ip_specific_prompt(context):
     otx_details = otx_data.get('details', {})
     threat_tags = otx_details.get('top_tags', [])
     
-    prompt = f"""Analyze this IP address for security threats:
+    prompt = f"""Analyze this IP address for cybersecurity threats.
+
+**CRITICAL: Return ONLY valid JSON. NO markdown code blocks (```json). NO extra text.**
 
 IP ADDRESS: {ioc_value}
-CLASSIFICATION: {classification}
+Classification: {classification}
 
-NETWORK ANALYSIS:
-- Open Ports: {', '.join(map(str, ports[:10])) if ports else 'None detected'}
-- Known Vulnerabilities: {len(vulns)} CVEs detected
+NETWORK INTELLIGENCE:
+- Open Ports: {', '.join(map(str, ports[:10])) if ports else 'None'}
+- CVE Vulnerabilities: {len(vulns)} detected
 - Location: {country}
 - Organization: {org}
 
 THREAT INTELLIGENCE:
-- Threat Tags: {', '.join(threat_tags[:5]) if threat_tags else 'None'}
-- OTX Threat Score: {otx_data.get('threat_score', 0)}/100
+- Tags: {', '.join(threat_tags[:5]) if threat_tags else 'None'}
+- OTX Score: {otx_data.get('threat_score', 0)}/100
 
-CONTEXT:
-This IP was submitted for threat analysis. Provide insights on:
-1. Why this IP is classified as {classification}
-2. What specific threats it poses (if any)
-3. Whether the open ports and services are suspicious
-4. Recommended actions
+Analyze:
+1. Why this IP is {classification}
+2. Threat level from open ports/services
+3. CVE risk assessment
+4. Recommended action
 
-Respond in JSON format:
+Return ONLY this JSON structure (no code blocks):
+
 {{
-  "summary": "Brief threat summary",
-  "explanation": "Detailed explanation",
-  "indicators": ["key finding 1", "key finding 2", "key finding 3"],
-  "recommendation": "Action to take",
-  "confidence": "High/Medium/Low"
-}}"""
+  "summary": "One sentence threat assessment for {ioc_value}",
+  "explanation": "Detailed analysis explaining the {classification} classification. Discuss the open ports, vulnerabilities, threat intelligence, and geographic/organizational context. Be specific and technical.",
+  "indicators": [
+    "Port/service finding",
+    "Vulnerability or threat intel finding",
+    "Geographic/reputation finding"
+  ],
+  "recommendation": "BLOCK/MONITOR/ALLOW with specific reasoning based on findings",
+  "confidence": "High"
+}}
+
+Pure JSON only:"""
     
     return prompt
 
@@ -124,7 +130,7 @@ def build_domain_specific_prompt(context):
     ioc_value = context.get('ioc_value', '')
     ioc_type = context.get('ioc_type', '')
     classification = context.get('classification', 'Unknown')
-    whois_summary = context.get('whois_summary', '')
+    whois_summary = context.get('whois_summary', 'No WHOIS data')
     
     raw_data = context.get('raw_data', {})
     otx_data = raw_data.get('otx', {})
@@ -132,33 +138,43 @@ def build_domain_specific_prompt(context):
     
     malware_families = otx_details.get('malware_families', [])
     threat_tags = otx_details.get('top_tags', [])
+    pulse_count = otx_data.get('source_count', 0)
     
-    prompt = f"""Analyze this {'domain' if ioc_type == 'domain' else 'URL'} for security threats:
+    prompt = f"""Analyze this {'domain' if ioc_type == 'domain' else 'URL'} for cybersecurity threats.
+
+**CRITICAL: Return ONLY pure JSON. NO markdown. NO ```json blocks. NO additional text.**
 
 {ioc_type.upper()}: {ioc_value}
-CLASSIFICATION: {classification}
+Classification: {classification}
 
-REGISTRATION INFO:
+WHOIS REGISTRATION:
 {whois_summary}
 
 THREAT INTELLIGENCE:
-- Malware Families: {', '.join(malware_families[:3]) if malware_families else 'None detected'}
+- Malware Families: {', '.join(malware_families[:3]) if malware_families else 'None'}
 - Threat Tags: {', '.join(threat_tags[:5]) if threat_tags else 'None'}
-- OTX Pulses: {otx_data.get('source_count', 0)}
+- OTX Pulses: {pulse_count}
 
-ANALYSIS REQUESTED:
-1. Is this domain/URL associated with malicious activity?
-2. What type of threat does it pose (phishing, malware distribution, C2, etc.)?
-3. Is the domain registration suspicious (newly registered, privacy protection, etc.)?
-4. What should users/organizations do about it?
+Determine:
+1. Malicious activity association (phishing, malware, C2, etc.)
+2. Registration suspicion (age, privacy protection, registrar)
+3. Known threat campaigns
+4. Security action required
 
-Respond in JSON format:
+Return this exact JSON (no markdown):
+
 {{
-  "summary": "One-line threat assessment",
-  "explanation": "Why this is {classification.lower()} - what activities is it known for?",
-  "indicators": ["specific indicator 1", "specific indicator 2", "specific indicator 3"],
-  "recommendation": "Block/Monitor/Allow with justification",
-  "confidence": "High/Medium/Low"
-}}"""
+  "summary": "One-line assessment of {ioc_value}",
+  "explanation": "Why this is {classification}. Discuss any malware associations, threat campaigns, registration anomalies, and specific threat activities. Reference the OTX pulses and WHOIS data.",
+  "indicators": [
+    "Malware/campaign association",
+    "Registration or WHOIS finding",
+    "Threat intelligence finding"
+  ],
+  "recommendation": "BLOCK/MONITOR/ALLOW - explain why based on threat type and severity",
+  "confidence": "High"
+}}
+
+JSON response:"""
     
     return prompt

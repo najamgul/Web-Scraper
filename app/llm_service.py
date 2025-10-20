@@ -44,6 +44,72 @@ def generate_threat_explanation(context):
         logger.error(f"LLM generation error: {e}")
         return get_fallback_explanation(context)
 
+def extract_json_from_response(content):
+    """
+    Robustly extract JSON from LLM response
+    Handles markdown code blocks, extra whitespace, and common issues
+    """
+    try:
+        content = content.strip()
+        
+        # Remove markdown code blocks
+        if '```json' in content:
+            # Extract content between ```json and ```
+            start = content.find('```json') + 7
+            end = content.find('```', start)
+            if end != -1:
+                content = content[start:end].strip()
+        elif content.startswith('```') and content.endswith('```'):
+            # Generic code block
+            content = content[3:-3].strip()
+        
+        # Try parsing
+        return json.loads(content)
+        
+    except json.JSONDecodeError as e:
+        logger.warning(f"JSON parsing failed: {e}")
+        
+        # Try to fix common issues
+        try:
+            # Attempt 1: Find first { and last }
+            start = content.find('{')
+            end = content.rfind('}')
+            if start != -1 and end != -1 and end > start:
+                json_str = content[start:end+1]
+                return json.loads(json_str)
+        except:
+            pass
+        
+        # If all else fails, return None
+        return None
+
+
+def validate_response_structure(parsed):
+    """
+    Validate that parsed JSON has required fields
+    """
+    if not isinstance(parsed, dict):
+        return False
+    
+    required_fields = ['summary', 'explanation', 'indicators', 'recommendation']
+    
+    # Check all required fields exist
+    if not all(key in parsed for key in required_fields):
+        missing = [k for k in required_fields if k not in parsed]
+        logger.warning(f"Response missing fields: {missing}")
+        return False
+    
+    # Validate field types
+    if not isinstance(parsed.get('indicators'), list):
+        logger.warning("'indicators' field is not a list")
+        return False
+    
+    # Check for empty critical fields
+    if not parsed.get('summary') or not parsed.get('explanation'):
+        logger.warning("Critical fields are empty")
+        return False
+    
+    return True
 
 def generate_with_gemini(context):
     """
@@ -52,43 +118,25 @@ def generate_with_gemini(context):
     try:
         import google.generativeai as genai
         
-        # Configure Gemini
         genai.configure(api_key=GEMINI_API_KEY)
-        
-        # Initialize model
         model = genai.GenerativeModel(LLM_MODEL)
-        
-        # Build prompt
         prompt = build_threat_prompt(context)
         
         logger.info(f"Calling Gemini API with model: {LLM_MODEL}")
         
-        # Generate content with safety settings
+        # INCREASED max_output_tokens to prevent truncation
         generation_config = {
-            'temperature': 0.3,  # Low temperature for factual responses
+            'temperature': 0.3,
             'top_p': 0.8,
             'top_k': 40,
-            'max_output_tokens': 1024,
+            'max_output_tokens': 2048,  # ← DOUBLED from 1024
         }
         
-        # Safety settings to allow security content
         safety_settings = [
-            {
-                "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-                "threshold": "BLOCK_NONE"
-            },
-            {
-                "category": "HARM_CATEGORY_HARASSMENT",
-                "threshold": "BLOCK_ONLY_HIGH"
-            },
-            {
-                "category": "HARM_CATEGORY_HATE_SPEECH",
-                "threshold": "BLOCK_ONLY_HIGH"
-            },
-            {
-                "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                "threshold": "BLOCK_ONLY_HIGH"
-            }
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_ONLY_HIGH"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_ONLY_HIGH"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_ONLY_HIGH"}
         ]
         
         response = model.generate_content(
@@ -97,37 +145,31 @@ def generate_with_gemini(context):
             safety_settings=safety_settings
         )
         
-        # Extract text from response
-        content = response.text
+        # CHECK if response was blocked or truncated
+        if not response.text:
+            logger.warning("Gemini returned empty response")
+            return get_fallback_explanation(context)
+        
+        # Check finish reason
+        if hasattr(response, 'candidates') and response.candidates:
+            finish_reason = response.candidates[0].finish_reason
+            if finish_reason != 1:  # 1 = STOP (natural completion)
+                logger.warning(f"Gemini response incomplete: finish_reason={finish_reason}")
+                # Still try to parse, but log the issue
+        
+        content = response.text.strip()
         logger.info(f"Gemini response received ({len(content)} chars)")
         
-        # Try to parse as JSON, fallback to text
-        try:
-            # Remove markdown code blocks if present
-            content_clean = content.strip()
-            if content_clean.startswith('```json'):
-                content_clean = content_clean[7:]
-            if content_clean.startswith('```'):
-                content_clean = content_clean[3:]
-            if content_clean.endswith('```'):
-                content_clean = content_clean[:-3]
-            content_clean = content_clean.strip()
-            
-            parsed = json.loads(content_clean)
-            
-            # Validate required fields
-            if not all(key in parsed for key in ['summary', 'explanation', 'indicators', 'recommendation']):
-                logger.warning("Gemini response missing required fields, parsing as text")
-                return parse_text_response(content, context)
-            
+        # IMPROVED JSON extraction
+        parsed = extract_json_from_response(content)
+        
+        if parsed and validate_response_structure(parsed):
             # Ensure confidence field exists
             if 'confidence' not in parsed:
                 parsed['confidence'] = 'Medium'
-            
             return parsed
-            
-        except json.JSONDecodeError as e:
-            logger.warning(f"Response is not valid JSON ({e}), parsing as text")
+        else:
+            logger.warning("Invalid response structure, parsing as text")
             return parse_text_response(content, context)
     
     except ImportError:
@@ -136,9 +178,8 @@ def generate_with_gemini(context):
     
     except Exception as e:
         logger.error(f"Gemini API error: {e}")
-        # Check if it's a safety filter issue
         if "safety" in str(e).lower():
-            logger.warning("Gemini safety filters triggered, using fallback")
+            logger.warning("Gemini safety filters triggered")
         return get_fallback_explanation(context)
 
 

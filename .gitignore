@@ -6,6 +6,8 @@ __pycache__/
 
 # Ignore virtual environment folder
 venv/
+venv
+.venv
 
 # Ignore local settings and IDE files
 .env
