@@ -981,6 +981,70 @@
             font-size: 1.2rem;
         }
     }
+    .menu-link {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.8rem 1.5rem;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    color: white;
+    text-decoration: none;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    cursor: pointer;
+    touch-action: manipulation;
+    min-height: 44px;
+    border: none; /* ✅ Added for button */
+    width: auto; /* ✅ Added for button */
+    font-family: inherit; /* ✅ Added for button */
+    -webkit-tap-highlight-color: rgba(76, 201, 240, 0.3);
+}
+
+.menu-link:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
+}
+
+.menu-link:active {
+    transform: translateY(0);
+    opacity: 0.8;
+}
+
+.logout-link {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+.logout-link:hover {
+    box-shadow: 0 6px 16px rgba(239, 68, 68, 0.4);
+}
+
+/* Mobile styles */
+@media (max-width: 768px) {
+    .menu-link {
+        width: 100%;
+        justify-content: flex-start;
+        padding: 1.2rem 1.5rem;
+        font-size: 1.1rem;
+        background: rgba(30, 41, 59, 0.6);
+        border-left: 3px solid #4cc9f0;
+        box-shadow: none;
+        border-radius: 8px;
+    }
+    
+    .menu-link:active {
+        background: rgba(30, 41, 59, 0.9);
+        transform: translateX(5px);
+    }
+    
+    .logout-link {
+        background: rgba(239, 68, 68, 0.2);
+        border-left-color: #ef4444;
+    }
+}
 </style>
 </head>
 <body>
@@ -1007,82 +1071,153 @@
             </div>
         </div>
     </div>
-    
-<nav class="navbar">
+    <nav class="navbar">
     <div class="navbar-content">
         <div class="navbar-brand">
             <i class="fas fa-shield-alt"></i>
-            <span class="navbar-title">Web Scraper For Data Extraction and Threat Intelligence</span>
+            <span class="navbar-title">Threat Intelligence</span>
         </div>
         
-        <!-- Hamburger Menu Button (Mobile Only) -->
-        <button class="navbar-toggle" id="navToggle" aria-label="Toggle menu">
+        <!-- Hamburger Menu Button -->
+        <button class="navbar-toggle" id="navToggle" type="button">
             <i class="fas fa-bars"></i>
         </button>
+    </div>
+    
+    <!-- Overlay -->
+    <div class="navbar-overlay" id="navOverlay"></div>
+    
+    <!-- Mobile Menu -->
+    <div class="navbar-user" id="navMenu">
+        <!-- Close button -->
+        <button class="navbar-close" id="navClose" type="button">
+            <i class="fas fa-times"></i>
+        </button>
         
-        <div class="navbar-user" id="navMenu">
-            <!-- Close button (inside menu, mobile only) -->
-            <button class="navbar-close" id="navClose" aria-label="Close menu">
-                <i class="fas fa-times"></i>
+        <!-- Menu Items - Using data-href instead of href -->
+        <div class="menu-items">
+            <button class="menu-link" data-href="{{ url_for('main.dashboard') }}" type="button">
+                <i class="fas fa-chart-line"></i>
+                <span>Dashboard</span>
             </button>
             
-            <a href="{{ url_for('main.dashboard') }}" class="btn btn-secondary">
-                <i class="fas fa-chart-line"></i> Dashboard
-            </a>
             <div class="user-info">
                 <i class="fas fa-user-circle"></i>
                 <span class="user-email">{{ session.get('username', 'User') }}</span>
             </div>
-            <a href="{{ url_for('main.logout') }}" class="btn-logout">
+            
+            <button class="menu-link logout-link" data-href="{{ url_for('main.logout') }}" type="button">
                 <i class="fas fa-sign-out-alt"></i>
-                Logout
-            </a>
+                <span>Logout</span>
+            </button>
         </div>
     </div>
-    
-    <!-- Overlay for mobile menu -->
-    <div class="navbar-overlay" id="navOverlay"></div>
 </nav>
 
 <script>
-    // Hamburger menu functionality
-    document.addEventListener('DOMContentLoaded', function() {
-        const navToggle = document.getElementById('navToggle');
-        const navClose = document.getElementById('navClose');
-        const navMenu = document.getElementById('navMenu');
-        const navOverlay = document.getElementById('navOverlay');
-
-        function openMenu() {
-            navMenu.classList.add('active');
-            navOverlay.classList.add('active');
-            document.body.style.overflow = 'hidden';
+// Mobile menu with forced navigation for WebView
+(function() {
+    const navToggle = document.getElementById('navToggle');
+    const navClose = document.getElementById('navClose');
+    const navMenu = document.getElementById('navMenu');
+    const navOverlay = document.getElementById('navOverlay');
+    
+    function openMenu(e) {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
         }
-
-        function closeMenu() {
-            navMenu.classList.remove('active');
-            navOverlay.classList.remove('active');
-            document.body.style.overflow = 'auto';
+        if (navMenu) navMenu.classList.add('active');
+        if (navOverlay) navOverlay.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+    
+    function closeMenu(e) {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
         }
-
-        if (navToggle) {
-            navToggle.addEventListener('click', openMenu);
-        }
-
-        if (navClose) {
-            navClose.addEventListener('click', closeMenu);
-        }
-
-        if (navOverlay) {
-            navOverlay.addEventListener('click', closeMenu);
-        }
-
-        // Close menu when clicking a link
-        const navLinks = navMenu.querySelectorAll('a');
-        navLinks.forEach(link => {
-            link.addEventListener('click', closeMenu);
+        if (navMenu) navMenu.classList.remove('active');
+        if (navOverlay) navOverlay.classList.remove('active');
+        document.body.style.overflow = 'auto';
+    }
+    
+    // ✅ Navigate function that works in WebView
+    function navigateTo(url) {
+        console.log('Navigating to:', url);
+        
+        // Close menu first
+        closeMenu();
+        
+        // Force navigation after short delay
+        setTimeout(function() {
+            window.location.href = url;
+        }, 100);
+    }
+    
+    // Hamburger button
+    if (navToggle) {
+        navToggle.addEventListener('click', openMenu);
+        navToggle.addEventListener('touchend', function(e) {
+            e.preventDefault();
+            openMenu();
+        });
+    }
+    
+    // Close button
+    if (navClose) {
+        navClose.addEventListener('click', closeMenu);
+        navClose.addEventListener('touchend', function(e) {
+            e.preventDefault();
+            closeMenu();
+        });
+    }
+    
+    // Overlay
+    if (navOverlay) {
+        navOverlay.addEventListener('click', closeMenu);
+        navOverlay.addEventListener('touchend', function(e) {
+            e.preventDefault();
+            closeMenu();
+        });
+    }
+    
+    // ✅ Menu link handlers with forced navigation
+    const menuLinks = document.querySelectorAll('.menu-link');
+    menuLinks.forEach(function(link) {
+        const url = link.getAttribute('data-href');
+        
+        if (!url) return;
+        
+        // Click handler
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            navigateTo(url);
+        });
+        
+        // Touch handler for better mobile response
+        link.addEventListener('touchend', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            navigateTo(url);
+        });
+        
+        // Visual feedback
+        link.addEventListener('touchstart', function(e) {
+            link.style.opacity = '0.6';
+            link.style.transform = 'translateX(5px)';
+        });
+        
+        link.addEventListener('touchcancel', function(e) {
+            link.style.opacity = '1';
+            link.style.transform = 'translateX(0)';
         });
     });
+})();
 </script>
+    
+
 
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}

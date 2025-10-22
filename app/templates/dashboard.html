@@ -227,43 +227,162 @@
                 grid-template-columns: 1fr;
             }
         }
+        .nav-link {
+    display: block;
+    width: 100%;
+    padding: 1rem;
+    background: rgba(30, 41, 59, 0.6);
+    color: #cbd5e1;
+    text-decoration: none;
+    border-radius: 12px;
+    font-size: 1rem;
+    border-left: 3px solid #4cc9f0;
+    margin-bottom: 1.5rem;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    touch-action: manipulation;
+    border: none;
+    border-left: 3px solid #4cc9f0;
+    font-family: inherit;
+    text-align: left;
+    -webkit-tap-highlight-color: rgba(76, 201, 240, 0.3);
+}
+
+.nav-link:active {
+    background: rgba(30, 41, 59, 0.9);
+    transform: translateX(5px);
+}
+
+.nav-link.logout-link {
+    border-left-color: #ef4444;
+    background: rgba(239, 68, 68, 0.2);
+}
+
+.nav-link.logout-link:active {
+    background: rgba(239, 68, 68, 0.3);
+}
     </style>
 </head>
 <body>
-    <!-- Navbar -->
-    <nav class="navbar">
+<nav class="navbar">
     <div class="navbar-content">
         <div class="navbar-brand">
             <i class="fas fa-chart-line"></i> Threat Intelligence Dashboard
         </div>
         
-        <!-- Hamburger Menu Button (Mobile Only) -->
-        <button class="navbar-toggle" onclick="toggleMobileMenu()">
+        <button class="navbar-toggle" id="dashNavToggle" type="button">
             <i class="fas fa-bars"></i>
         </button>
+    </div>
+    
+    <div class="navbar-overlay" id="dashNavOverlay"></div>
+    
+    <div class="navbar-links" id="dashNavMenu">
+        <button class="navbar-close" id="dashNavClose" type="button">
+            <i class="fas fa-times"></i>
+        </button>
         
-        <!-- Overlay for mobile menu -->
-        <div class="navbar-overlay" onclick="toggleMobileMenu()"></div>
-        
-        <div class="navbar-links">
-            <button class="navbar-close" onclick="toggleMobileMenu()">
-                <i class="fas fa-times"></i>
-            </button>
-            <a href="{{ url_for('main.index') }}"><i class="fas fa-search"></i> Scanner</a>
-            <a href="{{ url_for('main.history') }}"><i class="fas fa-history"></i> History</a>
-            <a href="{{ url_for('main.logout') }}"><i class="fas fa-sign-out-alt"></i> Logout</a>
-        </div>
+        <button class="nav-link" data-href="{{ url_for('main.index') }}" type="button">
+            <i class="fas fa-search"></i> Scanner
+        </button>
+        <button class="nav-link" data-href="{{ url_for('main.history') }}" type="button">
+            <i class="fas fa-history"></i> History
+        </button>
+        <button class="nav-link logout-link" data-href="{{ url_for('main.logout') }}" type="button">
+            <i class="fas fa-sign-out-alt"></i> Logout
+        </button>
     </div>
 </nav>
 
 <script>
-function toggleMobileMenu() {
-    document.querySelector('.navbar-links').classList.toggle('active');
-    document.querySelector('.navbar-overlay').classList.toggle('active');
-    document.body.style.overflow = document.querySelector('.navbar-links').classList.contains('active') ? 'hidden' : 'auto';
-}
-</script>
+// Dashboard mobile menu with forced navigation
+(function() {
+    const navToggle = document.getElementById('dashNavToggle');
+    const navClose = document.getElementById('dashNavClose');
+    const navMenu = document.getElementById('dashNavMenu');
+    const navOverlay = document.getElementById('dashNavOverlay');
     
+    function openMenu(e) {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        if (navMenu) navMenu.classList.add('active');
+        if (navOverlay) navOverlay.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+    
+    function closeMenu(e) {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        if (navMenu) navMenu.classList.remove('active');
+        if (navOverlay) navOverlay.classList.remove('active');
+        document.body.style.overflow = 'auto';
+    }
+    
+    function navigateTo(url) {
+        console.log('Navigating to:', url);
+        closeMenu();
+        setTimeout(function() {
+            window.location.href = url;
+        }, 100);
+    }
+    
+    if (navToggle) {
+        navToggle.addEventListener('click', openMenu);
+        navToggle.addEventListener('touchend', function(e) {
+            e.preventDefault();
+            openMenu();
+        });
+    }
+    
+    if (navClose) {
+        navClose.addEventListener('click', closeMenu);
+        navClose.addEventListener('touchend', function(e) {
+            e.preventDefault();
+            closeMenu();
+        });
+    }
+    
+    if (navOverlay) {
+        navOverlay.addEventListener('click', closeMenu);
+        navOverlay.addEventListener('touchend', function(e) {
+            e.preventDefault();
+            closeMenu();
+        });
+    }
+    
+    // Navigation links
+    const navLinks = document.querySelectorAll('.nav-link');
+    navLinks.forEach(function(link) {
+        const url = link.getAttribute('data-href');
+        
+        if (!url) return;
+        
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            navigateTo(url);
+        });
+        
+        link.addEventListener('touchend', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            navigateTo(url);
+        });
+        
+        link.addEventListener('touchstart', function(e) {
+            link.style.opacity = '0.6';
+        });
+        
+        link.addEventListener('touchcancel', function(e) {
+            link.style.opacity = '1';
+        });
+    });
+})();
+</script>
     <div class="container">
         <!-- Stats Overview -->
         <div class="stats-grid">
