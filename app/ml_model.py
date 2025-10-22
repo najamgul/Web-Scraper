@@ -1,4 +1,4 @@
-# ml_model.py
+# app/ml_model.py
 import joblib
 import os
 import logging
@@ -22,17 +22,13 @@ def classify_threat(vt_data=None, shodan_data=None, otx_data=None, ioc_type=None
     """
     Classify threat using reports from VirusTotal, Shodan, and OTX APIs.
     
-    For KEYWORDS: Use ONLY OTX classification
-    For other IOCs: Use Random Forest with all three APIs
+    ✅ IMPROVED: Better handling of missing data
     """
     try:
         vt_data = vt_data or {}
         shodan_data = shodan_data or {}
         otx_data = otx_data or {}
 
-        # ============================================
-        # 🔍 DEBUG: Print incoming data
-        # ============================================
         logger.info(f"\n{'='*80}")
         logger.info(f"🔍 CLASSIFICATION DEBUG for {ioc_type}: {user_input}")
         logger.info(f"{'='*80}")
@@ -41,35 +37,45 @@ def classify_threat(vt_data=None, shodan_data=None, otx_data=None, ioc_type=None
         logger.info(f"OTX Data Keys: {list(otx_data.keys())}")
         
         # ============================================
-        # FOR KEYWORDS: Use ONLY OTX classification
+        # FOR KEYWORDS: Use OTX or fallback to Informational
         # ============================================
         if ioc_type == "keyword":
-            if otx_data and 'classification' in otx_data:
-                classification = otx_data.get('classification', 'Unknown')
+            # ✅ Check if OTX has valid data
+            if otx_data and 'classification' in otx_data and otx_data.get('classification') != 'Unknown':
+                classification = otx_data.get('classification', 'Informational')
                 logger.info(f"✅ Keyword '{user_input}' classified as '{classification}' based on OTX")
                 return classification
+            
+            # ✅ Check if OTX has error or empty data
+            if 'error' in otx_data or not otx_data or otx_data.get('source_count', 0) == 0:
+                logger.info(f"⚠️  No OTX data for keyword '{user_input}', defaulting to Informational")
+                return "Informational"  # ← Changed from "Unknown"
+            
+            # ✅ Fallback: Use OTX threat score
+            threat_score = otx_data.get('threat_score', 0)
+            if threat_score >= 70:
+                classification = "Malicious"
+            elif threat_score >= 40:
+                classification = "Suspicious"
+            elif threat_score > 0:
+                classification = "Informational"
             else:
-                logger.info(f"⚠️  No OTX data for keyword '{user_input}', returning Unknown")
-                return "Unknown"
+                classification = "Informational"  # ← Changed from "Unknown"
+            
+            logger.info(f"✅ Keyword classified as '{classification}' (OTX score: {threat_score})")
+            return classification
 
         # ============================================
         # FOR OTHER IOC TYPES: Use Random Forest
         # ============================================
         
-        # ✅ FIX: Extract VirusTotal features correctly
+        # Extract VirusTotal features
         vt_malicious = 0
         vt_suspicious = 0
         
-        # Check if VT data has error
-        if "error" in vt_data:
-            logger.warning(f"⚠️  VirusTotal Error: {vt_data.get('error')}")
-            vt_malicious = 0
-            vt_suspicious = 0
-        else:
-            # Try multiple paths to get stats
+        if "error" not in vt_data:
             stats = vt_data.get("last_analysis_stats", {})
             if not stats:
-                # Try nested structure
                 stats = vt_data.get("data", {}).get("attributes", {}).get("last_analysis_stats", {})
             
             vt_malicious = stats.get("malicious", 0)
@@ -77,19 +83,15 @@ def classify_threat(vt_data=None, shodan_data=None, otx_data=None, ioc_type=None
         
         logger.info(f"📊 VT Stats: Malicious={vt_malicious}, Suspicious={vt_suspicious}")
 
-        # ✅ FIX: Extract Shodan features correctly
+        # Extract Shodan features
         port_count = 0
         vuln_count = 0
         
-        if "error" in shodan_data:
-            logger.warning(f"⚠️  Shodan Error: {shodan_data.get('error')}")
-        else:
-            # Get ports
+        if "error" not in shodan_data:
             ports = shodan_data.get("ports", [])
             if isinstance(ports, list):
                 port_count = len(ports)
             
-            # Get vulns (can be dict or list)
             vulns = shodan_data.get("vulns", [])
             if isinstance(vulns, dict):
                 vuln_count = len(vulns.keys())
@@ -98,22 +100,18 @@ def classify_threat(vt_data=None, shodan_data=None, otx_data=None, ioc_type=None
         
         logger.info(f"📊 Shodan Stats: Ports={port_count}, Vulns={vuln_count}")
 
-        # ✅ FIX: Extract OTX features correctly
+        # Extract OTX features
         otx_threat_score = 0
         is_otx_malicious = 0
         
-        if "error" in otx_data:
-            logger.warning(f"⚠️  OTX Error: {otx_data.get('error')}")
-        else:
+        if "error" not in otx_data:
             otx_threat_score = otx_data.get("threat_score", 0)
             otx_classification = otx_data.get("classification", "").lower()
-            
-            # Map OTX classification to binary
             is_otx_malicious = 1 if otx_classification in ["malicious", "suspicious"] else 0
         
-        logger.info(f"📊 OTX Stats: ThreatScore={otx_threat_score}, IsMalicious={is_otx_malicious}, Classification={otx_data.get('classification', 'N/A')}")
+        logger.info(f"📊 OTX Stats: ThreatScore={otx_threat_score}, IsMalicious={is_otx_malicious}")
 
-        # ✅ Feature vector for model prediction
+        # Feature vector
         features = [
             int(vt_malicious),
             int(vt_suspicious),
@@ -125,17 +123,28 @@ def classify_threat(vt_data=None, shodan_data=None, otx_data=None, ioc_type=None
         
         logger.info(f"🔢 Feature Vector: {features}")
 
-        # ✅ Check if all features are zero (no data from APIs)
+        # ✅ IMPROVED: Better handling when all features are zero
         if all(f == 0 for f in features):
-            logger.warning(f"⚠️  ALL FEATURES ARE ZERO - APIs may not have data or keys are missing")
-            logger.warning(f"⚠️  Defaulting to 'Unknown' classification")
-            return "Unknown"
+            logger.warning(f"⚠️  ALL FEATURES ARE ZERO")
+            
+            # Check if APIs actually returned data or just errors
+            has_vt_data = vt_data and "error" not in vt_data and vt_data.get("last_analysis_stats")
+            has_shodan_data = shodan_data and "error" not in shodan_data
+            has_otx_data = otx_data and "error" not in otx_data
+            
+            if has_vt_data or has_shodan_data or has_otx_data:
+                # APIs returned data but it's all clean
+                logger.info(f"✅ APIs returned clean data - classifying as Benign")
+                return "Benign"
+            else:
+                # APIs didn't return useful data
+                logger.warning(f"⚠️  No useful API data - classifying as Informational")
+                return "Informational"  # ← Changed from "Unknown"
 
-        # ✅ Use Random Forest model if available
+        # Use Random Forest model
         if model is not None:
             try:
                 prediction = model.predict([features])[0]
-                # Get prediction probability for debugging
                 proba = model.predict_proba([features])[0]
                 classification = "Malicious" if int(prediction) == 1 else "Benign"
                 
@@ -146,10 +155,8 @@ def classify_threat(vt_data=None, shodan_data=None, otx_data=None, ioc_type=None
                 return classification
             except Exception as e:
                 logger.error(f"❌ Model prediction error: {e}")
-                logger.info(f"   Falling back to rule-based classification")
-                # Fall through to rule-based
 
-        # ✅ Fallback: Rule-based classification
+        # Fallback: Rule-based classification
         result = rule_based_classification(features, ioc_type)
         logger.info(f"📋 Rule-Based Result: {result}")
         logger.info(f"{'='*80}\n")
@@ -157,7 +164,7 @@ def classify_threat(vt_data=None, shodan_data=None, otx_data=None, ioc_type=None
 
     except Exception as e:
         logger.error(f"❌ Classification error for '{user_input}': {e}", exc_info=True)
-        return "Unknown"
+        return "Informational"  # ← Changed from "Unknown"
 
 
 def rule_based_classification(features, ioc_type):
@@ -166,7 +173,6 @@ def rule_based_classification(features, ioc_type):
     
     logger.info(f"📋 Applying rule-based classification...")
     
-    # Calculate weighted score
     score = 0
     
     # VirusTotal weight
@@ -195,7 +201,7 @@ def rule_based_classification(features, ioc_type):
     # OTX weight
     if otx_score >= 70 or is_otx_malicious:
         score += 30
-        logger.info(f"   +30 points: OTX score >= 70 or is_malicious (score={otx_score}, is_mal={is_otx_malicious})")
+        logger.info(f"   +30 points: OTX score >= 70 or is_malicious")
     elif otx_score >= 40:
         score += 20
         logger.info(f"   +20 points: OTX score >= 40 ({otx_score})")
@@ -205,11 +211,15 @@ def rule_based_classification(features, ioc_type):
     # Classify
     if score >= 60:
         return "Malicious"
+    elif score >= 20:  # ← Lowered threshold
+        return "Suspicious"
     elif score > 0:
         return "Informational"
     else:
         return "Benign"
 
+
+# ... rest of your ml_model.py code (train_model_if_needed, etc.) ...
 
 def train_model_if_needed():
     """Train model if not found"""

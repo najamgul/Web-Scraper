@@ -22,7 +22,248 @@
             overflow-x: hidden;
         }
         
-        /* 3D Background Elements */
+        /* ========================================= */
+        /* ✅ LOADING OVERLAY STYLES */
+        /* ========================================= */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.98);
+            backdrop-filter: blur(10px);
+            z-index: 9999;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .loading-overlay.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        .loading-container {
+            text-align: center;
+            position: relative;
+        }
+
+        /* ========================================= */
+        /* ANIMATION OPTION 1: Radar Scanner */
+        /* ========================================= */
+        .radar-scanner {
+            width: 250px;
+            height: 250px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(67, 97, 238, 0.2) 0%, transparent 70%);
+            border: 3px solid rgba(76, 201, 240, 0.3);
+            position: relative;
+            margin: 0 auto 2rem;
+            box-shadow: 0 0 50px rgba(67, 97, 238, 0.5),
+                        inset 0 0 50px rgba(67, 97, 238, 0.2);
+        }
+
+        .radar-scanner::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 2px;
+            height: 50%;
+            background: linear-gradient(to bottom, #4cc9f0, transparent);
+            transform-origin: top center;
+            animation: radar-sweep 2s linear infinite;
+            box-shadow: 0 0 20px #4cc9f0;
+        }
+
+        .radar-scanner::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 10px;
+            height: 10px;
+            background: #4cc9f0;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 20px #4cc9f0;
+        }
+
+        @keyframes radar-sweep {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Radar rings */
+        .radar-ring {
+            position: absolute;
+            border: 1px solid rgba(76, 201, 240, 0.2);
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .radar-ring:nth-child(1) {
+            width: 60%;
+            height: 60%;
+        }
+
+        .radar-ring:nth-child(2) {
+            width: 80%;
+            height: 80%;
+        }
+
+        .radar-ring:nth-child(3) {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* ========================================= */
+        /* ANIMATION OPTION 2: DNA Helix */
+        /* ========================================= */
+        .dna-helix {
+            width: 200px;
+            height: 200px;
+            position: relative;
+            margin: 0 auto 2rem;
+            display: none; /* Hidden by default */
+        }
+
+        .dna-strand {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background: #4361ee;
+            border-radius: 50%;
+            box-shadow: 0 0 15px #4361ee;
+        }
+
+        .dna-strand:nth-child(odd) {
+            background: #4cc9f0;
+            box-shadow: 0 0 15px #4cc9f0;
+        }
+
+        @keyframes dna-rotate {
+            0% { transform: rotateY(0deg) translateX(80px); }
+            100% { transform: rotateY(360deg) translateX(80px); }
+        }
+
+        /* ========================================= */
+        /* ANIMATION OPTION 3: Particle Burst */
+        /* ========================================= */
+        .particle-burst {
+            width: 250px;
+            height: 250px;
+            position: relative;
+            margin: 0 auto 2rem;
+            display: none; /* Hidden by default */
+        }
+
+        .particle {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background: #4cc9f0;
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            box-shadow: 0 0 10px #4cc9f0;
+        }
+
+        @keyframes particle-explode {
+            0% {
+                transform: translate(-50%, -50%) scale(1);
+                opacity: 1;
+            }
+            100% {
+                transform: translate(var(--tx), var(--ty)) scale(0);
+                opacity: 0;
+            }
+        }
+
+        /* ========================================= */
+        /* Loading Text & Progress */
+        /* ========================================= */
+        .loading-text {
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #4361ee 0%, #4cc9f0 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 1.5rem;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .loading-status {
+            font-size: 1.2rem;
+            color: #94a3b8;
+            margin-bottom: 2rem;
+            min-height: 30px;
+        }
+
+        .loading-progress {
+            width: 400px;
+            height: 8px;
+            background: rgba(30, 41, 59, 0.8);
+            border-radius: 50px;
+            overflow: hidden;
+            margin: 0 auto;
+            box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .loading-progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #4361ee, #4cc9f0);
+            border-radius: 50px;
+            width: 0%;
+            animation: progress-fill 3s ease-in-out infinite;
+            box-shadow: 0 0 20px rgba(76, 201, 240, 0.8);
+        }
+
+        @keyframes progress-fill {
+            0% { width: 0%; }
+            50% { width: 70%; }
+            100% { width: 100%; }
+        }
+
+        /* Scanning dots */
+        .scanning-dots {
+            margin-top: 1.5rem;
+            font-size: 1.1rem;
+            color: #4cc9f0;
+        }
+
+        .scanning-dots span {
+            animation: dot-blink 1.4s infinite;
+        }
+
+        .scanning-dots span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .scanning-dots span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes dot-blink {
+            0%, 20% { opacity: 0; }
+            50% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+
+        /* ========================================= */
+        /* Original Styles (keeping all your existing CSS) */
+        /* ========================================= */
+        
         .bg-cubes {
             position: fixed;
             top: 0;
@@ -90,7 +331,6 @@
             }
         }
 
-        /* ✅ Navigation Bar */
         .navbar {
             background: rgba(30, 41, 59, 0.95);
             backdrop-filter: blur(10px);
@@ -223,7 +463,6 @@
             margin-right: auto;
         }
         
-        /* 3D Card Styles */
         .scanner-container {
             background: rgba(30, 41, 59, 0.8);
             backdrop-filter: blur(10px);
@@ -271,7 +510,6 @@
             font-size: 1.2rem;
         }
         
-        /* ✅ Improved Input Styling */
         .input-with-icon {
             position: relative;
             width: 100%;
@@ -471,7 +709,6 @@
             padding: 2rem 0;
         }
         
-        /* Flash Messages */
         .flash-messages {
             max-width: 1200px;
             margin: 1rem auto;
@@ -553,12 +790,43 @@
             .cube {
                 display: none;
             }
+
+            .loading-progress {
+                width: 90%;
+            }
+
+            .radar-scanner {
+                width: 200px;
+                height: 200px;
+            }
         }
     </style>
 </head>
 <body>
     
-    <!-- ✅ Navigation Bar -->
+    <!-- ✅ LOADING OVERLAY -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-container">
+            <!-- RADAR SCANNER (Default) -->
+            <div class="radar-scanner">
+                <div class="radar-ring"></div>
+                <div class="radar-ring"></div>
+                <div class="radar-ring"></div>
+            </div>
+            
+            <h2 class="loading-text">Scanning Threat Data</h2>
+            <p class="loading-status" id="loadingStatus">Initializing scan...</p>
+            
+            <div class="loading-progress">
+                <div class="loading-progress-bar"></div>
+            </div>
+            
+            <div class="scanning-dots">
+                <span>.</span><span>.</span><span>.</span>
+            </div>
+        </div>
+    </div>
+    
     <nav class="navbar">
         <div class="navbar-content">
             <div class="navbar-brand">
@@ -567,10 +835,9 @@
             </div>
             <div class="navbar-user">
                 <a href="{{ url_for('main.dashboard') }}" class="btn btn-secondary">
-                        <i class="fas fa-chart-line"></i> Dashboard
-                    </a>
+                    <i class="fas fa-chart-line"></i> Dashboard
+                </a>
                 <div class="user-info">
-                    
                     <i class="fas fa-user-circle"></i>
                     <span class="user-email">{{ session.get('username', 'User') }}</span>
                 </div>
@@ -582,7 +849,6 @@
         </div>
     </nav>
 
-    <!-- ✅ Flash Messages -->
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
             <div class="flash-messages">
@@ -623,7 +889,7 @@
         <div class="scanner-container">
             <h2><i class="fas fa-search"></i> Input Data</h2>
             <div class="form-section">
-                <form method="POST" enctype="multipart/form-data" action="{{ url_for('main.index') }}">
+                <form method="POST" enctype="multipart/form-data" action="{{ url_for('main.index') }}" id="scanForm">
                     {{ form.hidden_tag() }}
 
                     <div class="input-group">
@@ -648,7 +914,7 @@
                     </div>
 
                     <div class="button-group">
-                        <button type="submit" class="btn">
+                        <button type="submit" class="btn" id="scanBtn">
                             <i class="fas fa-play-circle"></i> Scan Now
                         </button>
                         <a href="{{ url_for('main.history') }}" class="btn btn-secondary">
@@ -711,10 +977,53 @@
     </div>
 
     <script>
-        // Enhanced animations for the input field
+        // ========================================
+        // ✅ LOADING ANIMATION SCRIPT
+        // ========================================
         document.addEventListener('DOMContentLoaded', function() {
+            const form = document.getElementById('scanForm');
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            const loadingStatus = document.getElementById('loadingStatus');
+            const scanBtn = document.getElementById('scanBtn');
+            
+            // Status messages for realistic loading experience
+            const statusMessages = [
+                'Initializing scan...',
+                'Querying VirusTotal...',
+                'Checking Shodan database...',
+                'Analyzing AlienVault OTX...',
+                'Running ML classification...',
+                'Generating AI insights...',
+                'Finalizing results...'
+            ];
+            
+            let messageIndex = 0;
+            let statusInterval;
+            
+            form.addEventListener('submit', function(e) {
+                // Show loading overlay
+                loadingOverlay.classList.add('active');
+                
+                // Disable submit button
+                scanBtn.disabled = true;
+                scanBtn.style.opacity = '0.6';
+                scanBtn.style.cursor = 'not-allowed';
+                
+                // Cycle through status messages
+                messageIndex = 0;
+                loadingStatus.textContent = statusMessages[0];
+                
+                statusInterval = setInterval(() => {
+                    messageIndex = (messageIndex + 1) % statusMessages.length;
+                    loadingStatus.textContent = statusMessages[messageIndex];
+                }, 2000); // Change message every 2 seconds
+                
+                // Form will submit normally (no preventDefault)
+                // Flask will render results.html which will hide the overlay
+            });
+            
+            // Enhanced input field animations
             const inputField = document.querySelector('textarea, input[type="text"]');
-            const submitBtn = document.querySelector('.btn[type="submit"]');
             
             if (inputField) {
                 inputField.addEventListener('focus', function() {
@@ -727,13 +1036,17 @@
                 });
             }
             
-            if (submitBtn) {
-                submitBtn.addEventListener('mouseenter', function() {
-                    this.style.transform = 'translateY(-5px)';
+            if (scanBtn) {
+                scanBtn.addEventListener('mouseenter', function() {
+                    if (!this.disabled) {
+                        this.style.transform = 'translateY(-5px)';
+                    }
                 });
                 
-                submitBtn.addEventListener('mouseleave', function() {
-                    this.style.transform = 'translateY(0)';
+                scanBtn.addEventListener('mouseleave', function() {
+                    if (!this.disabled) {
+                        this.style.transform = 'translateY(0)';
+                    }
                 });
             }
 
@@ -750,6 +1063,46 @@
                 }, 5000);
             });
         });
+    document.addEventListener('DOMContentLoaded', function() {
+        const form = document.getElementById('scanForm');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const loadingStatus = document.getElementById('loadingStatus');
+        const scanBtn = document.getElementById('scanBtn');
+        
+        // Status messages
+        const statusMessages = [
+            'Initializing scan...',
+            'Querying VirusTotal...',
+            'Checking Shodan database...',
+            'Analyzing AlienVault OTX...',
+            'Running ML classification...',
+            'Finalizing results...'
+        ];
+        
+        let messageIndex = 0;
+        let statusInterval;
+        
+        form.addEventListener('submit', function(e) {
+            // Show loading overlay
+            loadingOverlay.classList.add('active');
+            
+            // Disable submit button
+            scanBtn.disabled = true;
+            scanBtn.style.opacity = '0.6';
+            scanBtn.style.cursor = 'not-allowed';
+            
+            // Cycle through status messages
+            messageIndex = 0;
+            loadingStatus.textContent = statusMessages[0];
+            
+            statusInterval = setInterval(() => {
+                messageIndex = (messageIndex + 1) % statusMessages.length;
+                loadingStatus.textContent = statusMessages[messageIndex];
+            }, 2500); // Change message every 2.5 seconds
+            
+            // Form will submit normally
+        });
+    });
     </script>
 </body>
 </html>

@@ -13,37 +13,21 @@ logger = logging.getLogger(__name__)
 
 def enrich_threat_intelligence(ioc_value, ioc_type, vt_data, shodan_data, otx_data, classification):
     """
-    Main enrichment function that aggregates all data and generates AI explanation
-    
-    Args:
-        ioc_value: The IOC being analyzed (IP, domain, URL, hash, keyword)
-        ioc_type: Type of IOC
-        vt_data: VirusTotal report
-        shodan_data: Shodan report
-        otx_data: AlienVault OTX report
-        classification: Overall classification (Malicious/Benign/etc)
-    
-    Returns:
-        dict: Enriched context with AI explanation
+    ✅ OPTIMIZED: Skip WHOIS lookup to save 5-10 seconds
     """
     try:
         logger.info(f"🧠 Starting enrichment for {ioc_type}: {ioc_value}")
         
-        # Step 1: Gather additional data
+        # ✅ SKIP WHOIS - too slow
         whois_data = None
-        dns_data = None
         
-        if ioc_type in ['domain', 'url']:
-            whois_data = get_whois_data(ioc_value)
-            logger.info(f"   WHOIS data retrieved: {bool(whois_data)}")
-        
-        # Step 2: Extract key findings from each source
+        # Extract summaries
         vt_summary = extract_vt_summary(vt_data)
         shodan_summary = extract_shodan_summary(shodan_data, ioc_type)
         otx_summary = extract_otx_summary(otx_data)
-        whois_summary = extract_whois_summary(whois_data)
+        whois_summary = "WHOIS lookup disabled for speed optimization"
         
-        # Step 3: Build comprehensive context
+        # Build context
         context = {
             'ioc_value': ioc_value,
             'ioc_type': ioc_type,
@@ -56,14 +40,13 @@ def enrich_threat_intelligence(ioc_value, ioc_type, vt_data, shodan_data, otx_da
                 'vt': vt_data,
                 'shodan': shodan_data,
                 'otx': otx_data,
-                'whois': whois_data
+                'whois': None  # ✅ Skip WHOIS
             }
         }
         
-        # Step 4: Generate AI explanation
+        # ✅ AI explanation with shorter timeout
         ai_explanation = generate_threat_explanation(context)
         
-        # Step 5: Build enriched response
         enrichment = {
             'summary': ai_explanation.get('summary', ''),
             'why_malicious': ai_explanation.get('explanation', ''),
@@ -71,7 +54,7 @@ def enrich_threat_intelligence(ioc_value, ioc_type, vt_data, shodan_data, otx_da
             'recommendation': ai_explanation.get('recommendation', ''),
             'confidence': ai_explanation.get('confidence', 'Medium'),
             'risk_score': calculate_risk_score(vt_data, shodan_data, otx_data),
-            'sources_analyzed': get_sources_used(vt_data, shodan_data, otx_data, whois_data),
+            'sources_analyzed': get_sources_used(vt_data, shodan_data, otx_data, None),  # ✅ No WHOIS
             'technical_details': {
                 'vt_detections': vt_summary,
                 'network_exposure': shodan_summary,

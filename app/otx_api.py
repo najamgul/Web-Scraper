@@ -1,4 +1,4 @@
-# otx_api.py
+# app/otx_api.py
 import os
 from OTXv2 import OTXv2, IndicatorTypes
 import logging
@@ -11,79 +11,70 @@ OTX_API_KEY = os.getenv("OTX_API_KEY", "your_otx_api_key_here")
 # Initialize OTX client
 try:
     otx_client = OTXv2(OTX_API_KEY)
+    logger.info("✅ OTX client initialized successfully")
 except Exception as e:
-    logger.error(f"Failed to initialize OTX client: {e}")
+    logger.error(f"❌ Failed to initialize OTX client: {e}")
     otx_client = None
 
 
 def otx_lookup(query, ioc_type):
     """
-    Query the AlienVault OTX Threat Intelligence API for IPs, URLs, domains, hashes, or keywords.
-    Returns structured JSON that can be used by ml_model.py.
-    
-    Args:
-        query (str): The indicator to look up (IP, domain, URL, hash, or keyword)
-        ioc_type (str): Type of indicator - 'ip', 'domain', 'url', 'hash', 'keyword'
-    
-    Returns:
-        dict: {
-            "threat_score": int (0-100),
-            "classification": str (malicious/suspicious/benign/unknown),
-            "source_count": int (number of pulses/sources),
-            "details": dict (human-readable details),
-            "raw": dict (full OTX response)
-        }
+    ✅ SIMPLIFIED: Query OTX without nested executor
+    Timeout is handled by the parent ThreadPoolExecutor in routes.py
     """
-    
     if not otx_client:
+        logger.warning("OTX client not initialized")
         return {
             "error": "OTX client not initialized. Check your API key.",
             "threat_score": 0,
-            "classification": "unknown",
+            "classification": "Unknown",
             "source_count": 0,
             "details": {},
             "raw": {}
         }
     
     try:
+        logger.info(f"🔍 OTX lookup started for {ioc_type}: {query}")
+        
         if ioc_type == "keyword":
-            return _otx_keyword_lookup(query)
+            result = _otx_keyword_lookup(query)
         elif ioc_type == "ip":
-            return _otx_ip_lookup(query)
+            result = _otx_ip_lookup(query)
         elif ioc_type == "domain":
-            return _otx_domain_lookup(query)
+            result = _otx_domain_lookup(query)
         elif ioc_type == "url":
-            return _otx_url_lookup(query)
+            result = _otx_url_lookup(query)
         elif ioc_type == "hash":
-            return _otx_hash_lookup(query)
+            result = _otx_hash_lookup(query)
         else:
-            # Default to keyword search for unknown types
-            return _otx_keyword_lookup(query)
+            result = _otx_keyword_lookup(query)
+        
+        logger.info(f"✅ OTX lookup completed: {result.get('classification', 'Unknown')}, score: {result.get('threat_score', 0)}")
+        return result
     
     except Exception as e:
-        logger.error(f"OTX API error for {ioc_type} '{query}': {e}")
+        logger.error(f"❌ OTX API error for {ioc_type} '{query}': {e}", exc_info=True)
         return {
             "error": str(e),
             "threat_score": 0,
-            "classification": "unknown",
+            "classification": "Unknown",
             "source_count": 0,
-            "details": {},
+            "details": {"summary": f"Error: {str(e)}"},
             "raw": {}
         }
 
 
 def _otx_keyword_lookup(keyword):
-    """
-    Search OTX pulses for keyword-based threats (e.g., 'fraud', 'rdx', 'ransomware')
-    """
+    """Search OTX pulses for keyword-based threats"""
     try:
-        # Search pulses containing the keyword
+        logger.info(f"   Searching OTX pulses for keyword: {keyword}")
         results = otx_client.search_pulses(keyword)
         
         if not results or 'results' not in results:
+            logger.info(f"   No OTX results for keyword: {keyword}")
             return {
                 "threat_score": 0,
-                "classification": "benign",
+                "classification": "Benign",
                 "source_count": 0,
                 "details": {
                     "summary": f"No threat intelligence found for keyword '{keyword}'",
@@ -95,25 +86,24 @@ def _otx_keyword_lookup(keyword):
         
         pulses = results.get('results', [])
         pulse_count = len(pulses)
+        logger.info(f"   Found {pulse_count} pulses for keyword: {keyword}")
         
-        # Analyze pulses for malicious indicators
+        # Analyze pulses
         malicious_indicators = 0
         malware_families = []
         attack_ids = []
         tags = []
         adversaries = []
         
-        for pulse in pulses[:20]:  # Check top 20 pulses
+        for pulse in pulses[:10]:
             pulse_name = pulse.get('name', '').lower()
             pulse_tags = pulse.get('tags', [])
             tags.extend(pulse_tags)
             
-            # Count malicious keywords in pulse names and tags
             malicious_terms = [
                 'malware', 'ransomware', 'trojan', 'backdoor', 'phishing', 
                 'fraud', 'scam', 'exploit', 'vulnerability', 'botnet',
-                'c2', 'command and control', 'apt', 'threat', 'attack',
-                'rootkit', 'keylogger', 'spyware', 'worm', 'virus'
+                'c2', 'command and control', 'apt', 'threat', 'attack'
             ]
             
             if any(term in pulse_name for term in malicious_terms):
@@ -122,24 +112,21 @@ def _otx_keyword_lookup(keyword):
             if any(term in ' '.join(pulse_tags).lower() for term in malicious_terms):
                 malicious_indicators += 1
             
-            # Extract malware families
             if 'malware_families' in pulse:
                 malware_families.extend(pulse.get('malware_families', []))
             
-            # Extract ATT&CK IDs
             if 'attack_ids' in pulse:
                 attack_ids.extend(pulse.get('attack_ids', []))
             
-            # Extract adversary info
             if 'adversary' in pulse:
                 adversaries.append(pulse.get('adversary', ''))
         
-        # Calculate threat score (0-100)
+        # Calculate threat score
         threat_score = min(
-            (pulse_count * 5) +          # 5 points per pulse
-            (malicious_indicators * 10) + # 10 points per malicious indicator
-            (len(set(malware_families)) * 15) + # 15 points per unique malware family
-            (len(set(attack_ids)) * 10),  # 10 points per ATT&CK technique
+            (pulse_count * 5) +
+            (malicious_indicators * 10) +
+            (len(set(malware_families)) * 15) +
+            (len(set(attack_ids)) * 10),
             100
         )
         
@@ -157,7 +144,8 @@ def _otx_keyword_lookup(keyword):
             classification = "Benign"
             risk_level = "Low"
         
-        # Create human-readable details
+        logger.info(f"   Keyword analysis: score={threat_score}, classification={classification}")
+        
         details = {
             "summary": f"Found {pulse_count} threat intelligence reports mentioning '{keyword}'",
             "risk_level": risk_level,
@@ -190,7 +178,7 @@ def _otx_keyword_lookup(keyword):
         }
     
     except Exception as e:
-        logger.error(f"Keyword lookup error: {e}")
+        logger.error(f"Keyword lookup error: {e}", exc_info=True)
         return {
             "error": str(e),
             "threat_score": 0,
@@ -202,22 +190,18 @@ def _otx_keyword_lookup(keyword):
 
 
 def _otx_ip_lookup(ip):
-    """
-    Look up IP address reputation in OTX
-    """
+    """Look up IP address reputation in OTX"""
     try:
-        # Get full IP details from OTX
+        logger.info(f"   Querying OTX for IP: {ip}")
         result = otx_client.get_indicator_details_full(IndicatorTypes.IPv4, ip)
         
-        # Extract pulse information
         pulse_info = result.get('pulse_info', {})
         pulse_count = pulse_info.get('count', 0)
         pulses = pulse_info.get('pulses', [])
-        
-        # Extract general info
         general = result.get('general', {})
         
-        # Count malicious pulses
+        logger.info(f"   OTX IP result: {pulse_count} pulses")
+        
         malicious_count = 0
         tags = []
         
@@ -227,14 +211,8 @@ def _otx_ip_lookup(ip):
                    for term in ['malicious', 'malware', 'botnet', 'c2', 'exploit']):
                 malicious_count += 1
         
-        # Calculate threat score
-        threat_score = min(
-            (pulse_count * 8) +           # 8 points per pulse
-            (malicious_count * 15),       # 15 points per malicious pulse
-            100
-        )
+        threat_score = min((pulse_count * 8) + (malicious_count * 15), 100)
         
-        # Determine classification
         if threat_score >= 60 or malicious_count >= 3:
             classification = "Malicious"
             risk_level = "Critical"
@@ -248,7 +226,8 @@ def _otx_ip_lookup(ip):
             classification = "Benign"
             risk_level = "Low"
         
-        # Create details
+        logger.info(f"   IP analysis: score={threat_score}, classification={classification}")
+        
         details = {
             "summary": f"IP {ip} found in {pulse_count} threat reports" if pulse_count > 0 else f"IP {ip} appears clean",
             "risk_level": risk_level,
@@ -275,7 +254,7 @@ def _otx_ip_lookup(ip):
         }
     
     except Exception as e:
-        logger.error(f"IP lookup error: {e}")
+        logger.error(f"IP lookup error: {e}", exc_info=True)
         return {
             "error": str(e),
             "threat_score": 0,
@@ -287,17 +266,17 @@ def _otx_ip_lookup(ip):
 
 
 def _otx_domain_lookup(domain):
-    """
-    Look up domain reputation in OTX
-    """
+    """Look up domain reputation in OTX"""
     try:
+        logger.info(f"   Querying OTX for domain: {domain}")
         result = otx_client.get_indicator_details_full(IndicatorTypes.DOMAIN, domain)
         
         pulse_info = result.get('pulse_info', {})
         pulse_count = pulse_info.get('count', 0)
         pulses = pulse_info.get('pulses', [])
         
-        # Analyze pulses
+        logger.info(f"   OTX domain result: {pulse_count} pulses")
+        
         malicious_count = 0
         tags = []
         
@@ -307,13 +286,8 @@ def _otx_domain_lookup(domain):
             if any(term in pulse_name for term in ['phishing', 'malware', 'c2', 'malicious']):
                 malicious_count += 1
         
-        # Calculate threat score
-        threat_score = min(
-            (pulse_count * 10) + (malicious_count * 20),
-            100
-        )
+        threat_score = min((pulse_count * 10) + (malicious_count * 20), 100)
         
-        # Classification
         if threat_score >= 60:
             classification = "Malicious"
             risk_level = "Critical"
@@ -327,7 +301,6 @@ def _otx_domain_lookup(domain):
             classification = "Benign"
             risk_level = "Low"
         
-        # Details
         details = {
             "summary": f"Domain {domain} found in {pulse_count} threat reports" if pulse_count > 0 else f"Domain {domain} appears clean",
             "risk_level": risk_level,
@@ -349,7 +322,7 @@ def _otx_domain_lookup(domain):
         }
     
     except Exception as e:
-        logger.error(f"Domain lookup error: {e}")
+        logger.error(f"Domain lookup error: {e}", exc_info=True)
         return {
             "error": str(e),
             "threat_score": 0,
@@ -361,19 +334,16 @@ def _otx_domain_lookup(domain):
 
 
 def _otx_url_lookup(url):
-    """
-    Look up URL reputation in OTX
-    """
+    """Look up URL reputation in OTX"""
     try:
+        logger.info(f"   Querying OTX for URL: {url}")
         result = otx_client.get_indicator_details_full(IndicatorTypes.URL, url)
         
         pulse_info = result.get('pulse_info', {})
         pulse_count = pulse_info.get('count', 0)
         
-        # Calculate threat score
         threat_score = min(pulse_count * 12, 100)
         
-        # Classification
         if threat_score >= 50:
             classification = "Malicious"
             risk_level = "Critical"
@@ -405,7 +375,7 @@ def _otx_url_lookup(url):
         }
     
     except Exception as e:
-        logger.error(f"URL lookup error: {e}")
+        logger.error(f"URL lookup error: {e}", exc_info=True)
         return {
             "error": str(e),
             "threat_score": 0,
@@ -417,11 +387,8 @@ def _otx_url_lookup(url):
 
 
 def _otx_hash_lookup(file_hash):
-    """
-    Look up file hash in OTX (supports MD5, SHA1, SHA256)
-    """
+    """Look up file hash in OTX"""
     try:
-        # Detect hash type by length
         hash_length = len(file_hash)
         if hash_length == 32:
             indicator_type = IndicatorTypes.FILE_HASH_MD5
@@ -439,25 +406,20 @@ def _otx_hash_lookup(file_hash):
                 "raw": {}
             }
         
+        logger.info(f"   Querying OTX for hash: {file_hash[:16]}...")
         result = otx_client.get_indicator_details_full(indicator_type, file_hash)
         
         pulse_info = result.get('pulse_info', {})
         pulse_count = pulse_info.get('count', 0)
         pulses = pulse_info.get('pulses', [])
         
-        # Analyze pulses for malware
         malware_families = []
         for pulse in pulses[:10]:
             if 'malware_families' in pulse:
                 malware_families.extend(pulse.get('malware_families', []))
         
-        # Calculate threat score - files in OTX are usually malicious
-        threat_score = min(
-            (pulse_count * 15) + (len(set(malware_families)) * 20),
-            100
-        )
+        threat_score = min((pulse_count * 15) + (len(set(malware_families)) * 20), 100)
         
-        # Classification
         if pulse_count > 0:
             classification = "Malicious"
             risk_level = "Critical"
@@ -486,7 +448,7 @@ def _otx_hash_lookup(file_hash):
         }
     
     except Exception as e:
-        logger.error(f"Hash lookup error: {e}")
+        logger.error(f"Hash lookup error: {e}", exc_info=True)
         return {
             "error": str(e),
             "threat_score": 0,

@@ -16,7 +16,7 @@ load_dotenv()
 # -------------------------
 # CONFIG
 # -------------------------
-REQUEST_TIMEOUT = 12
+REQUEST_TIMEOUT = 10
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115 Safari/537.36"
@@ -97,37 +97,19 @@ def safe_get(url: str, params=None, headers=None) -> requests.Response:
         return None
 
 
-def google_cse_search(query: str, num_results: int = 5) -> List[Dict]:
+def google_cse_search(query: str, num_results: int = 3) -> List[Dict]:  # ← Changed from 5 to 3
     """
-    Google Custom Search Engine - ONLY for displaying scraped data.
-    NOT used for threat classification.
+    ✅ OPTIMIZED: Reduced results and timeout
     """
     if not GOOGLE_API_KEY or not GOOGLE_CSE_ID:
-        LOGGER.warning("Google API Key or CSE ID not set. Returning mock data.")
-        # ✅ Return informational mock data if API not configured
-        return [
-            {
-                "title": f"Threat Intelligence: {query}",
-                "url": f"https://example.com/threat/{query}",
-                "snippet": f"Threat analysis and intelligence data for {query}",
-                "content": f"Comprehensive threat intelligence report for the indicator: {query}. This information is aggregated from multiple security feeds.",
-                "displayLink": "example.com"
-            },
-            {
-                "title": f"Security Report: {query}",
-                "url": f"https://security.example.com/{query}",
-                "snippet": f"Security assessment report for {query}",
-                "content": f"Detailed security analysis covering reputation, risk factors, and historical data for {query}.",
-                "displayLink": "security.example.com"
-            }
-        ]
+        return []  # ✅ Skip mock data to save time
 
     url = "https://www.googleapis.com/customsearch/v1"
     params = {
         "key": GOOGLE_API_KEY,
         "cx": GOOGLE_CSE_ID,
         "q": query,
-        "num": num_results,
+        "num": num_results,  # ✅ Only 3 results
     }
 
     resp = safe_get(url, params=params)
@@ -137,45 +119,21 @@ def google_cse_search(query: str, num_results: int = 5) -> List[Dict]:
         try:
             data = resp.json()
             for item in data.get("items", []):
-                # Scrape the page content
-                page_content = ""
-                page_url = item.get("link")
-                
-                if page_url:
-                    try:
-                        page_resp = safe_get(page_url)
-                        if page_resp:
-                            soup = BeautifulSoup(page_resp.text, "html.parser")
-                            
-                            # Remove script, style, and noscript tags
-                            for tag in soup(["script", "style", "noscript", "iframe"]):
-                                tag.decompose()
-                            
-                            # Extract clean text
-                            page_content = " ".join(soup.stripped_strings)[:500]  # First 500 chars
-                        else:
-                            # Fallback to snippet if scraping fails
-                            page_content = item.get("snippet", "")
-                    except Exception as scrape_error:
-                        LOGGER.debug("Content scraping failed for %s: %s", page_url, scrape_error)
-                        page_content = item.get("snippet", "")
+                page_content = item.get("snippet", "")  # ✅ Skip actual page scraping
                 
                 results.append({
                     "title": item.get("title", "No title"),
-                    "url": page_url or "#",
+                    "url": item.get("link", "#"),
                     "snippet": item.get("snippet", ""),
                     "content": page_content,
                     "displayLink": item.get("displayLink", "")
                 })
                 
-                time.sleep(0.5)  # Rate limiting
+                # ✅ No sleep needed - we're not scraping pages
         except ValueError as json_error:
-            LOGGER.error("Failed to parse Google CSE response: %s", json_error)
-    else:
-        LOGGER.warning("No response from Google CSE API")
+            LOGGER.error(f"Failed to parse Google CSE response: {json_error}")
     
     return results
-
 
 def scrape_url(url: str) -> Dict:
     """

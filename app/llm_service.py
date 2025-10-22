@@ -113,7 +113,7 @@ def validate_response_structure(parsed):
 
 def generate_with_gemini(context):
     """
-    Generate explanation using Google Gemini Pro
+    ✅ OPTIMIZED: Reduced max_tokens and faster config
     """
     try:
         import google.generativeai as genai
@@ -124,47 +124,48 @@ def generate_with_gemini(context):
         
         logger.info(f"Calling Gemini API with model: {LLM_MODEL}")
         
-        # INCREASED max_output_tokens to prevent truncation
+        # ✅ FASTER configuration
         generation_config = {
-            'temperature': 0.3,
-            'top_p': 0.8,
-            'top_k': 40,
-            'max_output_tokens': 2048,  # ← DOUBLED from 1024
+            'temperature': 0.2,  # ← Lower for faster, more focused responses
+            'top_p': 0.7,        # ← Reduced
+            'top_k': 30,         # ← Reduced
+            'max_output_tokens': 1024,  # ← Reduced from 2048
         }
         
         safety_settings = [
             {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_ONLY_HIGH"},
-            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_ONLY_HIGH"},
-            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_ONLY_HIGH"}
         ]
         
-        response = model.generate_content(
-            prompt,
-            generation_config=generation_config,
-            safety_settings=safety_settings
-        )
+        # ✅ Add timeout wrapper
+        import concurrent.futures
         
-        # CHECK if response was blocked or truncated
+        def call_gemini():
+            return model.generate_content(
+                prompt,
+                generation_config=generation_config,
+                safety_settings=safety_settings
+            )
+        
+        # ✅ 8-second timeout for Gemini
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(call_gemini)
+            try:
+                response = future.result(timeout=8)  # ← 8 second max
+            except concurrent.futures.TimeoutError:
+                logger.warning("Gemini API timeout - using fallback")
+                return get_fallback_explanation(context)
+        
         if not response.text:
             logger.warning("Gemini returned empty response")
             return get_fallback_explanation(context)
         
-        # Check finish reason
-        if hasattr(response, 'candidates') and response.candidates:
-            finish_reason = response.candidates[0].finish_reason
-            if finish_reason != 1:  # 1 = STOP (natural completion)
-                logger.warning(f"Gemini response incomplete: finish_reason={finish_reason}")
-                # Still try to parse, but log the issue
-        
         content = response.text.strip()
         logger.info(f"Gemini response received ({len(content)} chars)")
         
-        # IMPROVED JSON extraction
         parsed = extract_json_from_response(content)
         
         if parsed and validate_response_structure(parsed):
-            # Ensure confidence field exists
             if 'confidence' not in parsed:
                 parsed['confidence'] = 'Medium'
             return parsed
@@ -172,14 +173,8 @@ def generate_with_gemini(context):
             logger.warning("Invalid response structure, parsing as text")
             return parse_text_response(content, context)
     
-    except ImportError:
-        logger.error("Google Generative AI package not installed. Run: pip install google-generativeai")
-        return get_fallback_explanation(context)
-    
     except Exception as e:
         logger.error(f"Gemini API error: {e}")
-        if "safety" in str(e).lower():
-            logger.warning("Gemini safety filters triggered")
         return get_fallback_explanation(context)
 
 

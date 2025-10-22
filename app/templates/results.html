@@ -464,6 +464,17 @@
         }
     </style>
 </head>
+<script>
+    try {
+        const loadingOverlay = window.opener?.document.getElementById('loadingOverlay');
+        if (loadingOverlay) {
+            loadingOverlay.classList.remove('active');
+        }
+    } catch (e) {
+        console.log('Loading overlay not found (expected on direct page load)');
+    }
+</script>
+
 <body>
     <div class="bg-cubes">
         <div class="cube"></div>
@@ -500,198 +511,304 @@
             </div>
         </div>
         
-        <!-- ========================================= -->
-        <!-- ✅ AI THREAT CONTEXT ENRICHMENT SECTION -->
-        <!-- ========================================= -->
-        {% if results.enrichment and results.enrichment.summary %}
+       <!-- ========================================= -->
+<!-- ✅ AI THREAT CONTEXT ENRICHMENT SECTION -->
+<!-- WITH LAZY LOADING -->
+<!-- ========================================= -->
+<div id="enrichment-container" style="
+    background: linear-gradient(135deg, rgba(67, 97, 238, 0.15) 0%, rgba(76, 201, 240, 0.15) 100%);
+    border-left: 5px solid #4361ee;
+    border-radius: 20px;
+    padding: 3rem;
+    margin: 3rem 0;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+    transform: perspective(1000px) rotateX(5deg);
+    transition: transform 0.5s ease;
+    border: 1px solid rgba(67, 97, 238, 0.3);
+">
+    <h2 style="
+        color: #4cc9f0;
+        font-size: 2rem;
+        margin-bottom: 2rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    ">
+        <i class="fas fa-brain"></i> AI Threat Analysis
+    </h2>
+    
+    <!-- ✅ Loading State -->
+    <div id="enrichment-loading" style="text-align: center; padding: 3rem;">
         <div style="
-            background: linear-gradient(135deg, rgba(67, 97, 238, 0.15) 0%, rgba(76, 201, 240, 0.15) 100%);
-            border-left: 5px solid #4361ee;
-            border-radius: 20px;
-            padding: 3rem;
-            margin: 3rem 0;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-            transform: perspective(1000px) rotateX(5deg);
-            transition: transform 0.5s ease;
-            border: 1px solid rgba(67, 97, 238, 0.3);
-        " onmouseover="this.style.transform='perspective(1000px) rotateX(0deg)'" 
-           onmouseout="this.style.transform='perspective(1000px) rotateX(5deg)'">
+            width: 60px;
+            height: 60px;
+            border: 5px solid rgba(76, 201, 240, 0.2);
+            border-top: 5px solid #4cc9f0;
+            border-radius: 50%;
+            margin: 0 auto 1.5rem;
+            animation: spin 1s linear infinite;
+        "></div>
+        <p style="font-size: 1.2rem; color: #94a3b8;">
+            <i class="fas fa-robot"></i> AI is analyzing threat data...
+        </p>
+        <p style="font-size: 0.9rem; color: #64748b; margin-top: 0.5rem;">
+            This may take 5-10 seconds
+        </p>
+    </div>
+    
+    <!-- ✅ Content (Hidden Initially) -->
+    <div id="enrichment-content" style="display: none;">
+        <!-- Content will be loaded here via AJAX -->
+    </div>
+    
+    <!-- ✅ Error State (Hidden Initially) -->
+    <div id="enrichment-error" style="display: none; text-align: center; padding: 2rem;">
+        <i class="fas fa-exclamation-triangle" style="font-size: 3rem; color: #f39c12; margin-bottom: 1rem;"></i>
+        <p style="font-size: 1.1rem; color: #e2e8f0;">AI analysis unavailable</p>
+        <p style="font-size: 0.9rem; color: #94a3b8;" id="enrichment-error-message"></p>
+    </div>
+</div>
+
+<style>
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+</style>
+
+<script>
+// ✅ LAZY LOAD ENRICHMENT VIA AJAX
+document.addEventListener('DOMContentLoaded', function() {
+    const iocId = "{{ results.ioc_id }}";
+    const loadingDiv = document.getElementById('enrichment-loading');
+    const contentDiv = document.getElementById('enrichment-content');
+    const errorDiv = document.getElementById('enrichment-error');
+    
+    // ✅ Always load enrichment via AJAX (since routes.py sets it to None)
+    console.log('🔄 Loading AI enrichment for IOC:', iocId);
+    
+    // Fetch enrichment via AJAX
+    fetch('/api/enrichment/' + iocId)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Server returned ' + response.status);
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log('✅ Enrichment loaded:', data);
             
-            <h2 style="
-                color: #4cc9f0;
-                font-size: 2rem;
-                margin-bottom: 2rem;
-                display: flex;
-                align-items: center;
-                gap: 1rem;
-            ">
-                <i class="fas fa-brain"></i> AI Threat Analysis
-                {% if results.enrichment.sources_analyzed %}
-                <span style="
-                    font-size: 0.8rem;
-                    background: rgba(76, 201, 240, 0.2);
-                    padding: 0.3rem 0.8rem;
-                    border-radius: 20px;
-                    color: #4cc9f0;
-                    border: 1px solid rgba(76, 201, 240, 0.3);
-                ">
-                    <i class="fas fa-check-circle"></i> {{ results.enrichment.sources_analyzed|join(', ') }}
-                </span>
-                {% endif %}
-            </h2>
-            
-            <!-- Summary -->
-            <div style="
-                font-size: 1.2rem;
-                margin-bottom: 2.5rem;
-                padding: 1.5rem;
-                background: rgba(255, 255, 255, 0.05);
-                border-radius: 12px;
-                line-height: 1.8;
-                box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-            ">
-                <i class="fas fa-quote-left" style="color: #4cc9f0; opacity: 0.5; margin-right: 0.5rem;"></i>
-                {{ results.enrichment.summary }}
-                <i class="fas fa-quote-right" style="color: #4cc9f0; opacity: 0.5; margin-left: 0.5rem;"></i>
-            </div>
-            
-            <!-- Why Malicious/Benign -->
-            <div style="
-                background: rgba(15, 23, 42, 0.6);
-                padding: 2rem;
-                border-radius: 15px;
-                margin-bottom: 2.5rem;
-                border: 1px solid rgba(255, 255, 255, 0.1);
-            ">
-                <h3 style="
-                    color: {% if results.classification == 'Malicious' %}#e74c3c{% elif results.classification == 'Benign' %}#2ecc71{% else %}#f39c12{% endif %};
-                    font-size: 1.5rem;
-                    margin-bottom: 1.5rem;
-                    display: flex;
-                    align-items: center;
-                    gap: 0.8rem;
-                ">
-                    {% if results.classification == 'Malicious' %}
-                        <i class="fas fa-exclamation-triangle"></i> Why is this dangerous?
-                    {% elif results.classification == 'Benign' %}
-                        <i class="fas fa-shield-check"></i> Why is this safe?
-                    {% else %}
-                        <i class="fas fa-info-circle"></i> Analysis Details
-                    {% endif %}
-                </h3>
-                <div style="
-                    white-space: pre-line;
-                    line-height: 1.8;
-                    color: #e2e8f0;
-                ">
-                    {{ results.enrichment.why_malicious }}
-                </div>
-            </div>
-            
-            <!-- Key Indicators -->
-            {% if results.enrichment.key_indicators %}
-            <div style="margin-bottom: 2.5rem;">
-                <h3 style="
-                    color: #f39c12;
-                    font-size: 1.5rem;
-                    margin-bottom: 1.5rem;
-                    display: flex;
-                    align-items: center;
-                    gap: 0.8rem;
-                ">
-                    <i class="fas fa-list-check"></i> Key Threat Indicators
-                </h3>
-                <div style="
-                    display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-                    gap: 1rem;
-                ">
-                    {% for indicator in results.enrichment.key_indicators %}
-                    <div style="
-                        background: rgba(243, 156, 18, 0.1);
-                        padding: 1.2rem;
-                        border-left: 3px solid #f39c12;
-                        border-radius: 8px;
-                        display: flex;
-                        align-items: start;
-                        gap: 1rem;
-                        transition: all 0.3s ease;
-                    " onmouseover="this.style.background='rgba(243, 156, 18, 0.2)'" 
-                       onmouseout="this.style.background='rgba(243, 156, 18, 0.1)'">
-                        <i class="fas fa-check-circle" style="color: #f39c12; margin-top: 0.2rem; font-size: 1.2rem;"></i>
-                        <span>{{ indicator }}</span>
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
-            {% endif %}
-            
-            <!-- Recommendation -->
-            <div style="
-                background: {% if results.classification == 'Malicious' %}rgba(231, 76, 60, 0.15){% elif results.classification == 'Benign' %}rgba(46, 204, 113, 0.15){% else %}rgba(243, 156, 18, 0.15){% endif %};
-                padding: 2rem;
-                border-radius: 15px;
-                border: 2px solid {% if results.classification == 'Malicious' %}rgba(231, 76, 60, 0.4){% elif results.classification == 'Benign' %}rgba(46, 204, 113, 0.4){% else %}rgba(243, 156, 18, 0.4){% endif %};
-            ">
-                <h3 style="
-                    color: {% if results.classification == 'Malicious' %}#e74c3c{% elif results.classification == 'Benign' %}#2ecc71{% else %}#f39c12{% endif %};
-                    font-size: 1.5rem;
-                    margin-bottom: 1.5rem;
-                    display: flex;
-                    align-items: center;
-                    gap: 0.8rem;
-                ">
-                    <i class="fas fa-shield-alt"></i> Recommended Action
-                </h3>
-                <p style="
-                    font-size: 1.1rem;
-                    font-weight: 600;
-                    line-height: 1.8;
-                    color: #e2e8f0;
-                ">
-                    {{ results.enrichment.recommendation }}
-                </p>
+            if (data.status === 'complete' && data.enrichment) {
+                const enrichment = data.enrichment;
                 
-                <div style="
-                    margin-top: 1.5rem;
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    padding-top: 1.5rem;
-                    border-top: 1px solid rgba(255, 255, 255, 0.1);
-                    flex-wrap: wrap;
-                    gap: 1rem;
-                ">
-                    <div>
-                        <strong style="color: #94a3b8;">Confidence Level:</strong>
-                        <span style="
-                            color: {% if results.enrichment.confidence == 'High' %}#2ecc71{% elif results.enrichment.confidence == 'Low' %}#e74c3c{% else %}#f39c12{% endif %};
-                            font-weight: 700;
-                            margin-left: 0.5rem;
-                            font-size: 1.1rem;
-                        ">
-                            {{ results.enrichment.confidence }}
-                        </span>
+                // Build enrichment HTML
+                let html = '';
+                
+                // Summary
+                if (enrichment.summary) {
+                    html += `
+                    <div style="
+                        font-size: 1.2rem;
+                        margin-bottom: 2.5rem;
+                        padding: 1.5rem;
+                        background: rgba(255, 255, 255, 0.05);
+                        border-radius: 12px;
+                        line-height: 1.8;
+                        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+                    ">
+                        <i class="fas fa-quote-left" style="color: #4cc9f0; opacity: 0.5; margin-right: 0.5rem;"></i>
+                        ${enrichment.summary}
+                        <i class="fas fa-quote-right" style="color: #4cc9f0; opacity: 0.5; margin-left: 0.5rem;"></i>
                     </div>
+                    `;
+                }
+                
+                // Why Malicious/Benign
+                if (enrichment.why_malicious) {
+                    const classification = "{{ results.classification }}";
+                    let iconClass = 'fa-info-circle';
+                    let color = '#f39c12';
                     
-                    {% if results.enrichment.risk_score is defined %}
-                    <div>
-                        <strong style="color: #94a3b8;">Risk Score:</strong>
-                        <span style="
-                            font-size: 1.3rem;
-                            font-weight: 700;
-                            margin-left: 0.5rem;
-                            color: {% if results.enrichment.risk_score >= 70 %}#e74c3c{% elif results.enrichment.risk_score >= 40 %}#f39c12{% else %}#2ecc71{% endif %};
+                    if (classification === 'Malicious') {
+                        iconClass = 'fa-exclamation-triangle';
+                        color = '#e74c3c';
+                    } else if (classification === 'Benign') {
+                        iconClass = 'fa-shield-check';
+                        color = '#2ecc71';
+                    }
+                    
+                    html += `
+                    <div style="
+                        background: rgba(15, 23, 42, 0.6);
+                        padding: 2rem;
+                        border-radius: 15px;
+                        margin-bottom: 2.5rem;
+                        border: 1px solid rgba(255, 255, 255, 0.1);
+                    ">
+                        <h3 style="
+                            color: ${color};
+                            font-size: 1.5rem;
+                            margin-bottom: 1.5rem;
+                            display: flex;
+                            align-items: center;
+                            gap: 0.8rem;
                         ">
-                            {{ results.enrichment.risk_score }}/100
-                        </span>
+                            <i class="fas ${iconClass}"></i> Analysis Details
+                        </h3>
+                        <div style="white-space: pre-line; line-height: 1.8; color: #e2e8f0;">
+                            ${enrichment.why_malicious}
+                        </div>
                     </div>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-        {% endif %}
-        <!-- ========================================= -->
+                    `;
+                }
+                
+                // Key Indicators
+                if (enrichment.key_indicators && enrichment.key_indicators.length > 0) {
+                    html += `
+                    <div style="margin-bottom: 2.5rem;">
+                        <h3 style="
+                            color: #f39c12;
+                            font-size: 1.5rem;
+                            margin-bottom: 1.5rem;
+                            display: flex;
+                            align-items: center;
+                            gap: 0.8rem;
+                        ">
+                            <i class="fas fa-list-check"></i> Key Threat Indicators
+                        </h3>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem;">
+                    `;
+                    
+                    enrichment.key_indicators.forEach(indicator => {
+                        html += `
+                        <div style="
+                            background: rgba(243, 156, 18, 0.1);
+                            padding: 1.2rem;
+                            border-left: 3px solid #f39c12;
+                            border-radius: 8px;
+                            display: flex;
+                            align-items: start;
+                            gap: 1rem;
+                        ">
+                            <i class="fas fa-check-circle" style="color: #f39c12; margin-top: 0.2rem; font-size: 1.2rem;"></i>
+                            <span>${indicator}</span>
+                        </div>
+                        `;
+                    });
+                    
+                    html += `</div></div>`;
+                }
+                
+                // Recommendation
+                if (enrichment.recommendation) {
+                    const classification = "{{ results.classification }}";
+                    let bgColor = 'rgba(243, 156, 18, 0.15)';
+                    let borderColor = 'rgba(243, 156, 18, 0.4)';
+                    let textColor = '#f39c12';
+                    
+                    if (classification === 'Malicious') {
+                        bgColor = 'rgba(231, 76, 60, 0.15)';
+                        borderColor = 'rgba(231, 76, 60, 0.4)';
+                        textColor = '#e74c3c';
+                    } else if (classification === 'Benign') {
+                        bgColor = 'rgba(46, 204, 113, 0.15)';
+                        borderColor = 'rgba(46, 204, 113, 0.4)';
+                        textColor = '#2ecc71';
+                    }
+                    
+                    html += `
+                    <div style="
+                        background: ${bgColor};
+                        padding: 2rem;
+                        border-radius: 15px;
+                        border: 2px solid ${borderColor};
+                    ">
+                        <h3 style="
+                            color: ${textColor};
+                            font-size: 1.5rem;
+                            margin-bottom: 1.5rem;
+                            display: flex;
+                            align-items: center;
+                            gap: 0.8rem;
+                        ">
+                            <i class="fas fa-shield-alt"></i> Recommended Action
+                        </h3>
+                        <p style="
+                            font-size: 1.1rem;
+                            font-weight: 600;
+                            line-height: 1.8;
+                            color: #e2e8f0;
+                        ">
+                            ${enrichment.recommendation}
+                        </p>
+                        
+                        <div style="
+                            margin-top: 1.5rem;
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: center;
+                            padding-top: 1.5rem;
+                            border-top: 1px solid rgba(255, 255, 255, 0.1);
+                            flex-wrap: wrap;
+                            gap: 1rem;
+                        ">
+                            <div>
+                                <strong style="color: #94a3b8;">Confidence Level:</strong>
+                                <span style="
+                                    color: ${enrichment.confidence === 'High' ? '#2ecc71' : enrichment.confidence === 'Low' ? '#e74c3c' : '#f39c12'};
+                                    font-weight: 700;
+                                    margin-left: 0.5rem;
+                                    font-size: 1.1rem;
+                                ">
+                                    ${enrichment.confidence || 'Medium'}
+                                </span>
+                            </div>
+                            
+                            ${enrichment.risk_score !== undefined ? `
+                            <div>
+                                <strong style="color: #94a3b8;">Risk Score:</strong>
+                                <span style="
+                                    font-size: 1.3rem;
+                                    font-weight: 700;
+                                    margin-left: 0.5rem;
+                                    color: ${enrichment.risk_score >= 70 ? '#e74c3c' : enrichment.risk_score >= 40 ? '#f39c12' : '#2ecc71'};
+                                ">
+                                    ${enrichment.risk_score}/100
+                                </span>
+                            </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                    `;
+                }
+                
+                // Insert HTML
+                contentDiv.innerHTML = html;
+                
+                // Show content, hide loading
+                loadingDiv.style.display = 'none';
+                contentDiv.style.display = 'block';
+                
+                // Animate in
+                contentDiv.style.opacity = '0';
+                setTimeout(() => {
+                    contentDiv.style.transition = 'opacity 0.5s ease';
+                    contentDiv.style.opacity = '1';
+                }, 100);
+            } else {
+                throw new Error('Invalid enrichment data');
+            }
+        })
+        .catch(error => {
+            console.error('❌ Enrichment error:', error);
+            
+            // Show error
+            loadingDiv.style.display = 'none';
+            errorDiv.style.display = 'block';
+            document.getElementById('enrichment-error-message').textContent = error.message || 'Failed to load AI analysis';
+        });
+});
+</script>
         <!-- END AI THREAT CONTEXT ENRICHMENT         -->
         <!-- ========================================= -->
         
@@ -1033,20 +1150,251 @@
             {% endif %}
         </div>
         
-        <h2 class="section-title"><i class="fas fa-globe"></i> Scraped Data</h2>
-        
-        {% set scraped = results.scraped or [] %}
-        
-        <div class="report-card">
-            {% if scraped and not (scraped | tojson).lower().startswith('[{"title": "no scraped data found"') %}
-            <pre class="json-view">{{ scraped | tojson(indent=2) }}</pre>
-            {% else %}
-            <div class="no-data">
-                <i class="fas fa-info-circle" style="font-size: 3rem; margin-bottom: 1.5rem;"></i>
-                <p>No scraped data found</p>
+    <h2 class="section-title"><i class="fas fa-search"></i> Google Search Intelligence</h2>
+
+{% set google_fmt = results.google_formatted %}
+
+<div class="report-card">
+    {% if google_fmt %}
+        <!-- Threat Score Progress Bar -->
+        <div style="margin-bottom: 3rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <span style="font-size: 1.2rem; font-weight: 600; color: #4cc9f0;">
+                    <i class="fas fa-chart-line"></i> Search Intelligence Score
+                </span>
+                <span style="font-size: 1.5rem; font-weight: 700; color: #e2e8f0;">
+                    {{ google_fmt.threat_score }}/100
+                </span>
             </div>
-            {% endif %}
+            <div style="background: rgba(15, 23, 42, 0.7); border-radius: 50px; height: 30px; overflow: hidden; box-shadow: inset 0 2px 10px rgba(0,0,0,0.3);">
+                <div style="
+                    height: 100%; 
+                    width: {{ google_fmt.threat_score }}%; 
+                    background: {% if google_fmt.threat_score >= 60 %}linear-gradient(90deg, #e74c3c, #c0392b)
+                    {% elif google_fmt.threat_score >= 30 %}linear-gradient(90deg, #f39c12, #e67e22)
+                    {% else %}linear-gradient(90deg, #3498db, #2980b9){% endif %};
+                    transition: width 1s ease;
+                    display: flex;
+                    align-items: center;
+                    justify-content: flex-end;
+                    padding-right: 15px;
+                    color: white;
+                    font-weight: 600;
+                "></div>
+            </div>
         </div>
+
+        <!-- Summary Card -->
+        <div style="background: rgba(67, 97, 238, 0.1); border-left: 4px solid #4361ee; padding: 1.5rem; border-radius: 12px; margin-bottom: 2.5rem;">
+            <p style="font-size: 1.1rem; color: #e2e8f0; margin: 0;">
+                <i class="fas fa-info-circle" style="color: #4cc9f0; margin-right: 0.5rem;"></i>
+                {{ google_fmt.summary }}
+            </p>
+        </div>
+
+        <!-- Stats Grid -->
+        <div class="stats-grid">
+            <div class="stat-item">
+                <div class="stat-value" style="color: 
+                    {% if google_fmt.classification == 'High Risk' %}#e74c3c
+                    {% elif google_fmt.classification == 'Medium Risk' %}#f39c12
+                    {% elif google_fmt.classification == 'Low Risk' %}#3498db
+                    {% else %}#2ecc71{% endif %};">
+                    {{ google_fmt.classification }}
+                </div>
+                <div class="stat-label">Risk Classification</div>
+            </div>
+
+            <div class="stat-item">
+                <div class="stat-value" style="color: 
+                    {% if google_fmt.risk_level == 'Critical' %}#e74c3c
+                    {% elif google_fmt.risk_level == 'High' %}#f39c12
+                    {% elif google_fmt.risk_level == 'Medium' %}#3498db
+                    {% else %}#2ecc71{% endif %};">
+                    {{ google_fmt.risk_level }}
+                </div>
+                <div class="stat-label">Risk Level</div>
+            </div>
+
+            <div class="stat-item">
+                <div class="stat-value" style="color: #4cc9f0;">
+                    {{ google_fmt.result_count }}
+                </div>
+                <div class="stat-label">Search Results</div>
+            </div>
+
+            <div class="stat-item">
+                <div class="stat-value" style="color: #9f7aea;">
+                    {{ google_fmt.total_domains }}
+                </div>
+                <div class="stat-label">Unique Domains</div>
+            </div>
+        </div>
+
+        <!-- Threat Indicators -->
+        {% if google_fmt.threat_indicators %}
+        <div style="margin-top: 2.5rem; padding: 2rem; background: rgba(231, 76, 60, 0.1); border-radius: 15px; border: 1px solid rgba(231, 76, 60, 0.3);">
+            <h4 style="color: #e74c3c; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.8rem;">
+                <i class="fas fa-exclamation-triangle"></i> Threat Indicators Found
+            </h4>
+            <div style="display: flex; flex-wrap: wrap; gap: 1rem;">
+                {% for indicator in google_fmt.threat_indicators %}
+                <span style="
+                    background: linear-gradient(135deg, #e74c3c, #c0392b);
+                    color: white;
+                    padding: 0.6rem 1.2rem;
+                    border-radius: 20px;
+                    font-size: 0.95rem;
+                    font-weight: 600;
+                    box-shadow: 0 4px 10px rgba(231, 76, 60, 0.3);
+                ">
+                    <i class="fas fa-flag"></i> {{ indicator }}
+                </span>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Safe Indicators -->
+        {% if google_fmt.safe_indicators %}
+        <div style="margin-top: 2.5rem; padding: 2rem; background: rgba(46, 204, 113, 0.1); border-radius: 15px; border: 1px solid rgba(46, 204, 113, 0.3);">
+            <h4 style="color: #2ecc71; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.8rem;">
+                <i class="fas fa-shield-check"></i> Safety Indicators
+            </h4>
+            <div style="display: flex; flex-wrap: wrap; gap: 1rem;">
+                {% for indicator in google_fmt.safe_indicators %}
+                <span style="
+                    background: linear-gradient(135deg, #2ecc71, #27ae60);
+                    color: white;
+                    padding: 0.6rem 1.2rem;
+                    border-radius: 20px;
+                    font-size: 0.95rem;
+                    font-weight: 600;
+                    box-shadow: 0 4px 10px rgba(46, 204, 113, 0.3);
+                ">
+                    <i class="fas fa-check-circle"></i> {{ indicator }}
+                </span>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Domains Found -->
+        {% if google_fmt.unique_domains %}
+        <div style="margin-top: 2.5rem; padding: 2rem; background: rgba(15, 23, 42, 0.5); border-radius: 15px;">
+            <h4 style="color: #4cc9f0; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.8rem;">
+                <i class="fas fa-globe"></i> Domains Referenced
+            </h4>
+            <div style="display: flex; flex-wrap: wrap; gap: 0.8rem;">
+                {% for domain in google_fmt.unique_domains %}
+                <span style="
+                    background: rgba(76, 201, 240, 0.2);
+                    color: #4cc9f0;
+                    padding: 0.5rem 1rem;
+                    border-radius: 15px;
+                    font-size: 0.9rem;
+                    border: 1px solid rgba(76, 201, 240, 0.3);
+                    font-family: monospace;
+                ">
+                    {{ domain }}
+                </span>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Top Search Results -->
+        {% if google_fmt.top_results %}
+        <div style="margin-top: 2.5rem; padding: 2rem; background: rgba(15, 23, 42, 0.5); border-radius: 15px;">
+            <h4 style="color: #9f7aea; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.8rem;">
+                <i class="fas fa-list-ol"></i> Top Search Results
+            </h4>
+            <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+                {% for result in google_fmt.top_results %}
+                <div style="
+                    background: rgba(30, 41, 59, 0.6);
+                    padding: 1.5rem;
+                    border-radius: 12px;
+                    border-left: 3px solid #9f7aea;
+                    transition: all 0.3s ease;
+                " onmouseover="this.style.background='rgba(30, 41, 59, 0.8)'" onmouseout="this.style.background='rgba(30, 41, 59, 0.6)'">
+                    <div style="display: flex; align-items: start; gap: 1rem; margin-bottom: 0.8rem;">
+                        <i class="fas fa-link" style="color: #9f7aea; margin-top: 0.3rem;"></i>
+                        <div style="flex: 1;">
+                            <h5 style="font-size: 1.2rem; font-weight: 600; color: #e2e8f0; margin-bottom: 0.5rem;">
+                                {{ result.title }}
+                            </h5>
+                            <a href="{{ result.url }}" target="_blank" style="
+                                color: #4cc9f0;
+                                text-decoration: none;
+                                font-size: 0.9rem;
+                                word-break: break-all;
+                            " onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">
+                                {{ result.url }}
+                            </a>
+                        </div>
+                    </div>
+                    <div style="padding-left: 2rem;">
+                        <span style="
+                            display: inline-block;
+                            background: rgba(76, 201, 240, 0.2);
+                            color: #4cc9f0;
+                            padding: 0.3rem 0.8rem;
+                            border-radius: 12px;
+                            font-size: 0.85rem;
+                            margin-bottom: 0.8rem;
+                        ">
+                            {{ result.domain }}
+                        </span>
+                        <p style="color: #cbd5e1; line-height: 1.6; margin: 0;">
+                            {{ result.snippet }}
+                        </p>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Content Previews -->
+        {% if google_fmt.content_previews %}
+        <div style="margin-top: 2.5rem; padding: 2rem; background: rgba(15, 23, 42, 0.5); border-radius: 15px;">
+            <h4 style="color: #48bb78; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.8rem;">
+                <i class="fas fa-file-alt"></i> Content Analysis
+            </h4>
+            <div style="display: flex; flex-direction: column; gap: 1rem;">
+                {% for preview in google_fmt.content_previews %}
+                <div style="
+                    background: rgba(255, 255, 255, 0.05);
+                    padding: 1rem 1.5rem;
+                    border-radius: 8px;
+                    border-left: 2px solid #48bb78;
+                ">
+                    <p style="color: #cbd5e1; line-height: 1.6; margin: 0; font-style: italic;">
+                        "{{ preview }}"
+                    </p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Raw JSON (Collapsible) -->
+        <details style="margin-top: 3rem;">
+            <summary>View Raw Search Data (JSON)</summary>
+            <pre class="json-view">{{ google_fmt.raw | tojson(indent=2) }}</pre>
+        </details>
+
+    {% else %}
+        <div class="no-data">
+            <i class="fas fa-info-circle" style="font-size: 3rem; margin-bottom: 1.5rem;"></i>
+            <p>No Google search data available</p>
+            <p style="font-size: 0.9rem; color: #94a3b8; margin-top: 0.5rem;">
+                This IOC type may not support web search intelligence
+            </p>
+        </div>
+    {% endif %}
+</div>
         
         
         <div class="chart-grid">
@@ -1292,7 +1640,8 @@
             }]
         });
     }
-    </script>
+    
+</script>
     
 </body>
 </html>
