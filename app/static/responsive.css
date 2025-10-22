@@ -1,22 +1,29 @@
 /* ================================================================
-   RESPONSIVE & MOBILE-FIRST CSS
-   Add this file to app/static/responsive.css
+   RESPONSIVE & MOBILE-FIRST CSS - FIXED VERSION
+   Replace entire responsive.css with this
    ================================================================ */
 
 /* ========================================
-   1. GLOBAL MOBILE FIXES
+   1. GLOBAL MOBILE FIXES (CORRECTED)
    ======================================== */
 
 * {
-    -webkit-tap-highlight-color: transparent;
-    -webkit-touch-callout: none;
-    -webkit-user-select: none;
-    user-select: none;
+    -webkit-tap-highlight-color: rgba(76, 201, 240, 0.3);
+    box-sizing: border-box;
 }
 
-input, textarea, button, a {
+/* ✅ REMOVED problematic user-select: none from global */
+
+/* Allow text selection for inputs */
+input, textarea {
     -webkit-user-select: text;
     user-select: text;
+}
+
+/* Prevent text selection for UI elements only */
+button, .btn, .navbar-toggle, .navbar-close {
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 body {
@@ -30,6 +37,15 @@ body {
 html {
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
+}
+
+/* ✅ Ensure all clickable elements work on mobile */
+a, button, .btn, input[type="submit"], input[type="button"], 
+.classification, summary, .export-links a, .navbar-links a,
+.navbar-toggle, .back-btn, .learn-more {
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(76, 201, 240, 0.3);
 }
 
 /* ========================================
@@ -47,11 +63,12 @@ html {
     font-size: 1.5rem;
     cursor: pointer;
     transition: all 0.3s ease;
+    z-index: 1001;
+    position: relative;
 }
 
 .navbar-toggle:hover {
     background: rgba(76, 201, 240, 0.3);
-    transform: scale(1.1);
 }
 
 .navbar-toggle:active {
@@ -75,7 +92,7 @@ html {
         backdrop-filter: blur(20px);
         padding: 5rem 2rem 2rem 2rem;
         transition: right 0.4s ease;
-        z-index: 999;
+        z-index: 1000;
         box-shadow: -5px 0 25px rgba(0, 0, 0, 0.5);
         overflow-y: auto;
     }
@@ -92,6 +109,8 @@ html {
         border-radius: 12px;
         font-size: 1.1rem;
         border-left: 3px solid #4cc9f0;
+        cursor: pointer;
+        touch-action: manipulation;
     }
 
     /* Mobile overlay */
@@ -102,8 +121,9 @@ html {
         width: 100%;
         height: 100%;
         background: rgba(0, 0, 0, 0.7);
-        z-index: 998;
+        z-index: 999;
         display: none;
+        touch-action: none;
     }
 
     .navbar-overlay.active {
@@ -122,6 +142,7 @@ html {
         border-radius: 8px;
         font-size: 1.3rem;
         cursor: pointer;
+        z-index: 1001;
     }
 
     /* Dashboard navbar */
@@ -196,7 +217,8 @@ html {
     }
 
     /* Two-column layouts */
-    div[style*="grid-template-columns: 1fr 1fr"] {
+    div[style*="grid-template-columns: 1fr 1fr"],
+    div[style*="display: grid"][style*="grid-template-columns: 1fr 1fr"] {
         grid-template-columns: 1fr !important;
     }
 }
@@ -255,19 +277,25 @@ html {
 
 @media (max-width: 768px) {
     textarea,
-    input[type="text"] {
-        font-size: 1rem !important;
+    input[type="text"],
+    input[type="email"],
+    input[type="password"] {
+        font-size: 16px !important; /* Prevents zoom on iOS */
         padding: 1rem 1rem 1rem 3rem !important;
+        touch-action: manipulation;
     }
 
     .input-with-icon i {
         left: 15px !important;
         font-size: 1.1rem !important;
+        pointer-events: none;
     }
 
-    .btn {
+    .btn, button {
         padding: 1rem 1.5rem !important;
         font-size: 1rem !important;
+        min-height: 48px; /* iOS minimum touch target */
+        touch-action: manipulation;
     }
 
     .button-group {
@@ -281,10 +309,12 @@ html {
 }
 
 /* Touch-friendly buttons */
-.btn, button, a {
+.btn, button, a.btn {
     min-height: 44px;
     min-width: 44px;
-    -webkit-tap-highlight-color: transparent;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 /* ========================================
@@ -293,7 +323,7 @@ html {
 
 @media (max-width: 768px) {
     .threat-table,
-    .report-card table {
+    .report-card {
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
     }
@@ -310,7 +340,7 @@ html {
         font-size: 0.9rem !important;
     }
 
-    /* Alternative: Card view for tables */
+    /* Mobile card view for tables */
     .table-mobile-cards {
         display: none;
     }
@@ -330,6 +360,7 @@ html {
             border-radius: 12px;
             margin-bottom: 1rem;
             border-left: 3px solid #4cc9f0;
+            touch-action: manipulation;
         }
 
         .table-card-row {
@@ -437,6 +468,8 @@ html {
         margin: 0.5rem 0 !important;
         padding: 1rem !important;
         text-align: center;
+        touch-action: manipulation;
+        min-height: 48px;
     }
 }
 
@@ -460,6 +493,8 @@ html {
     summary {
         font-size: 1rem !important;
         padding: 1rem !important;
+        cursor: pointer;
+        touch-action: manipulation;
     }
 }
 
@@ -499,6 +534,7 @@ html {
         height: 50px !important;
         font-size: 1.2rem !important;
         transform: none !important;
+        touch-action: manipulation;
     }
 
     .back-btn:hover {
@@ -516,11 +552,6 @@ html {
    ======================================== */
 
 @media (max-width: 768px) {
-    /* Dashboard table/feed layout */
-    div[style*="display: grid"][style*="grid-template-columns: 1fr 1fr"] {
-        grid-template-columns: 1fr !important;
-    }
-
     .live-feed {
         max-height: 400px !important;
     }
@@ -540,6 +571,8 @@ html {
         font-size: 1rem !important;
         padding: 0.8rem 1.5rem !important;
         transform: none !important;
+        display: inline-block;
+        cursor: default;
     }
 
     .classification:hover {
@@ -573,8 +606,8 @@ html {
    ======================================== */
 
 @media (max-width: 768px) {
-    /* Make search result cards more compact */
-    div[style*="padding: 1.5rem"][style*="border-left: 3px solid #9f7aea"] {
+    /* Search result cards */
+    div[style*="padding: 1.5rem"][style*="border-left: 3px solid"] {
         padding: 1rem !important;
         font-size: 0.9rem;
     }
@@ -583,6 +616,7 @@ html {
     span[style*="padding: 0.6rem 1.2rem"] {
         padding: 0.5rem 0.8rem !important;
         font-size: 0.85rem !important;
+        display: inline-block;
     }
 
     /* Domain tags */
@@ -615,6 +649,7 @@ html {
     .btn-signup {
         width: 100%;
         justify-content: center;
+        touch-action: manipulation;
     }
 
     .logo h1 {
@@ -642,7 +677,12 @@ html {
     }
 
     .form-group input {
-        font-size: 1rem;
+        font-size: 16px !important; /* Prevents iOS zoom */
+    }
+
+    .form-container .btn {
+        width: 100%;
+        touch-action: manipulation;
     }
 }
 
@@ -673,17 +713,6 @@ html {
    21. ANDROID WEBVIEW OPTIMIZATIONS
    ======================================== */
 
-/* Prevent zoom on input focus (iOS/Android) */
-@media (max-width: 768px) {
-    input[type="text"],
-    input[type="email"],
-    input[type="password"],
-    textarea,
-    select {
-        font-size: 16px !important; /* Prevents auto-zoom */
-    }
-}
-
 /* Smooth scrolling for Android */
 html {
     scroll-behavior: smooth;
@@ -705,7 +734,6 @@ html {
 .scanner-container {
     -webkit-transform: translateZ(0);
     transform: translateZ(0);
-    will-change: transform;
 }
 
 /* ========================================
@@ -762,30 +790,24 @@ html {
 }
 
 /* ========================================
-   24. PRINT STYLES
+   24. ENSURE CLICKABILITY ON MOBILE
    ======================================== */
 
-@media print {
-    .navbar,
-    .back-btn,
-    .export-links,
-    .btn,
-    .cube,
-    .bg-cubes,
-    .navbar-toggle,
-    .flash-messages {
-        display: none !important;
-    }
+/* Force pointer events for all interactive elements */
+a, button, input, textarea, select, 
+.btn, .classification, .back-btn, 
+.export-links a, .navbar-links a,
+.learn-more, summary, details,
+.btn-login, .btn-signup, .btn-logout,
+.navbar-toggle, .navbar-close,
+.table-card, .feed-item {
+    pointer-events: auto !important;
+    cursor: pointer;
+}
 
-    body {
-        background: white;
-        color: black;
-    }
-
-    .container {
-        max-width: 100%;
-        padding: 0;
-    }
+/* Ensure forms are interactive */
+form * {
+    pointer-events: auto !important;
 }
 
 /* ========================================
