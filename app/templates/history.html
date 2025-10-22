@@ -1,8 +1,15 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0f172a">
+<!-- Add responsive CSS -->
+<link rel="stylesheet" href="{{ url_for('static', filename='responsive.css') }}">
 <title>Search History - Threat Intelligence Scanner</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <style>
@@ -68,33 +75,60 @@ tr:hover { background: rgba(76, 201, 240, 0.1); }
     <h1>Your Search History</h1>
 
     {% if results %}
-    <table>
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Input</th>
-                <th>Type</th>
-                <th>Classification</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for r in results %}
-            <tr>
-                <td>{{ r.id }}</td>
-                <td>{{ r.input_value }}</td>
-                <td>{{ r.type }}</td>
-                <td>
-                    <span class="classification {{ r.classification.lower() }}">
-                        {{ r.classification }}
-                    </span>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-        <p style="text-align:center; margin-top:2rem;">No past scans found.</p>
-    {% endif %}
+<!-- Desktop Table (Hidden on Mobile) -->
+<table class="table-desktop">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Input</th>
+            <th>Type</th>
+            <th>Classification</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for r in results %}
+        <tr>
+            <td>{{ r.id }}</td>
+            <td>{{ r.input_value }}</td>
+            <td>{{ r.type }}</td>
+            <td>
+                <span class="classification {{ r.classification.lower() }}">
+                    {{ r.classification }}
+                </span>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<!-- Mobile Card View (Hidden on Desktop) -->
+<div class="table-mobile-cards">
+    {% for r in results %}
+    <div class="table-card">
+        <div class="table-card-row">
+            <span class="table-card-label">ID:</span>
+            <span class="table-card-value">{{ r.id }}</span>
+        </div>
+        <div class="table-card-row">
+            <span class="table-card-label">Input:</span>
+            <span class="table-card-value">{{ r.input_value }}</span>
+        </div>
+        <div class="table-card-row">
+            <span class="table-card-label">Type:</span>
+            <span class="table-card-value">{{ r.type }}</span>
+        </div>
+        <div class="table-card-row">
+            <span class="table-card-label">Classification:</span>
+            <span class="classification {{ r.classification.lower() }}">
+                {{ r.classification }}
+            </span>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<p style="text-align:center; margin-top:2rem;">No past scans found.</p>
+{% endif %}
 
     <div class="export-links">
         <a href="{{ url_for('main.export', format='csv', ioc_id=results[0].id if results else 1) }}">Export CSV</a>

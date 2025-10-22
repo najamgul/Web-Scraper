@@ -1,8 +1,16 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0f172a">
+
+<!-- Add responsive CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='responsive.css') }}">
     <title>Threat Intelligence Dashboard</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -224,15 +232,37 @@
 <body>
     <!-- Navbar -->
     <nav class="navbar">
+    <div class="navbar-content">
         <div class="navbar-brand">
             <i class="fas fa-chart-line"></i> Threat Intelligence Dashboard
         </div>
+        
+        <!-- Hamburger Menu Button (Mobile Only) -->
+        <button class="navbar-toggle" onclick="toggleMobileMenu()">
+            <i class="fas fa-bars"></i>
+        </button>
+        
+        <!-- Overlay for mobile menu -->
+        <div class="navbar-overlay" onclick="toggleMobileMenu()"></div>
+        
         <div class="navbar-links">
+            <button class="navbar-close" onclick="toggleMobileMenu()">
+                <i class="fas fa-times"></i>
+            </button>
             <a href="{{ url_for('main.index') }}"><i class="fas fa-search"></i> Scanner</a>
             <a href="{{ url_for('main.history') }}"><i class="fas fa-history"></i> History</a>
             <a href="{{ url_for('main.logout') }}"><i class="fas fa-sign-out-alt"></i> Logout</a>
         </div>
-    </nav>
+    </div>
+</nav>
+
+<script>
+function toggleMobileMenu() {
+    document.querySelector('.navbar-links').classList.toggle('active');
+    document.querySelector('.navbar-overlay').classList.toggle('active');
+    document.body.style.overflow = document.querySelector('.navbar-links').classList.contains('active') ? 'hidden' : 'auto';
+}
+</script>
     
     <div class="container">
         <!-- Stats Overview -->

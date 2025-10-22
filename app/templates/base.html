@@ -1,8 +1,16 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0f172a">
+
+<!-- Add responsive CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='responsive.css') }}">
     <title>Threat Intel Dashboard</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -13,7 +21,7 @@
 <body>
     <header>
         <nav>
-            <div class="logo">Threat Intelligence Web Scraper</div>
+            <div class="logo">Web Scraper for data extraction and Threat Intelligence </div>
         </nav>
     </header>
 
@@ -22,7 +30,7 @@
     </main>
 
     <footer>
-        <p>&copy; {{ current_year }} Threat Intelligence Web Scraper. All rights reserved.</p>
+        <p>&copy; {{ current_year }} Web Scraper for data extraction and Threat Intelligence . All rights reserved.</p>
     </footer>
 </body>
 </html>

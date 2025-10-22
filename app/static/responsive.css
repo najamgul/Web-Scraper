@@ -1,0 +1,821 @@
+/* ================================================================
+   RESPONSIVE & MOBILE-FIRST CSS
+   Add this file to app/static/responsive.css
+   ================================================================ */
+
+/* ========================================
+   1. GLOBAL MOBILE FIXES
+   ======================================== */
+
+* {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+input, textarea, button, a {
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+    width: 100%;
+}
+
+/* Prevent text inflation on Android */
+html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+/* ========================================
+   2. RESPONSIVE NAVBAR (Hamburger Menu)
+   ======================================== */
+
+/* Mobile menu toggle button */
+.navbar-toggle {
+    display: none;
+    background: rgba(76, 201, 240, 0.2);
+    border: 2px solid rgba(76, 201, 240, 0.4);
+    color: #4cc9f0;
+    padding: 0.5rem 0.8rem;
+    border-radius: 8px;
+    font-size: 1.5rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.navbar-toggle:hover {
+    background: rgba(76, 201, 240, 0.3);
+    transform: scale(1.1);
+}
+
+.navbar-toggle:active {
+    transform: scale(0.95);
+}
+
+@media (max-width: 768px) {
+    /* Show hamburger button */
+    .navbar-toggle {
+        display: block;
+    }
+
+    /* Hide/show navbar links */
+    .navbar-links {
+        position: fixed;
+        top: 0;
+        right: -100%;
+        width: 280px;
+        height: 100vh;
+        background: rgba(15, 23, 42, 0.98);
+        backdrop-filter: blur(20px);
+        padding: 5rem 2rem 2rem 2rem;
+        transition: right 0.4s ease;
+        z-index: 999;
+        box-shadow: -5px 0 25px rgba(0, 0, 0, 0.5);
+        overflow-y: auto;
+    }
+
+    .navbar-links.active {
+        right: 0;
+    }
+
+    .navbar-links a {
+        display: block;
+        margin: 0 0 1.5rem 0;
+        padding: 1rem;
+        background: rgba(30, 41, 59, 0.6);
+        border-radius: 12px;
+        font-size: 1.1rem;
+        border-left: 3px solid #4cc9f0;
+    }
+
+    /* Mobile overlay */
+    .navbar-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        z-index: 998;
+        display: none;
+    }
+
+    .navbar-overlay.active {
+        display: block;
+    }
+
+    /* Close button */
+    .navbar-close {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        background: rgba(239, 68, 68, 0.2);
+        border: 2px solid rgba(239, 68, 68, 0.4);
+        color: #ef4444;
+        padding: 0.5rem 0.8rem;
+        border-radius: 8px;
+        font-size: 1.3rem;
+        cursor: pointer;
+    }
+
+    /* Dashboard navbar */
+    .navbar-content {
+        flex-direction: row !important;
+        flex-wrap: wrap;
+    }
+
+    .navbar-brand {
+        font-size: 1rem !important;
+        flex: 1;
+    }
+
+    .navbar-user {
+        width: 100%;
+        margin-top: 1rem;
+        flex-wrap: wrap;
+        gap: 0.8rem;
+    }
+
+    .user-info {
+        font-size: 0.85rem;
+        padding: 0.5rem 1rem;
+    }
+
+    .btn-logout {
+        padding: 0.6rem 1.2rem;
+        font-size: 0.9rem;
+    }
+}
+
+/* ========================================
+   3. RESPONSIVE CONTAINERS & GRIDS
+   ======================================== */
+
+@media (max-width: 1200px) {
+    .container {
+        max-width: 100%;
+        padding: 1.5rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .container {
+        padding: 1rem;
+    }
+
+    /* Stats grids */
+    .stats-grid {
+        grid-template-columns: 1fr !important;
+        gap: 1rem !important;
+    }
+
+    /* Charts grids */
+    .charts-grid,
+    .chart-grid {
+        grid-template-columns: 1fr !important;
+        gap: 1.5rem !important;
+    }
+
+    /* Features grid */
+    .features-grid {
+        grid-template-columns: 1fr !important;
+        gap: 1.5rem !important;
+    }
+
+    /* Summary card */
+    .summary-card {
+        grid-template-columns: 1fr !important;
+        gap: 1.5rem !important;
+        padding: 1.5rem !important;
+    }
+
+    /* Two-column layouts */
+    div[style*="grid-template-columns: 1fr 1fr"] {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+/* ========================================
+   4. RESPONSIVE TYPOGRAPHY
+   ======================================== */
+
+@media (max-width: 768px) {
+    h1 {
+        font-size: 1.8rem !important;
+    }
+
+    h2, .section-title {
+        font-size: 1.5rem !important;
+    }
+
+    h3, .chart-title {
+        font-size: 1.2rem !important;
+    }
+
+    .subtitle {
+        font-size: 1rem !important;
+    }
+
+    .navbar-brand {
+        font-size: 1.1rem !important;
+    }
+
+    .stat-value {
+        font-size: 2rem !important;
+    }
+
+    .stat-label {
+        font-size: 0.95rem !important;
+    }
+}
+
+@media (max-width: 480px) {
+    h1 {
+        font-size: 1.5rem !important;
+    }
+
+    h2 {
+        font-size: 1.3rem !important;
+    }
+
+    .stat-value {
+        font-size: 1.5rem !important;
+    }
+}
+
+/* ========================================
+   5. RESPONSIVE FORMS & INPUTS
+   ======================================== */
+
+@media (max-width: 768px) {
+    textarea,
+    input[type="text"] {
+        font-size: 1rem !important;
+        padding: 1rem 1rem 1rem 3rem !important;
+    }
+
+    .input-with-icon i {
+        left: 15px !important;
+        font-size: 1.1rem !important;
+    }
+
+    .btn {
+        padding: 1rem 1.5rem !important;
+        font-size: 1rem !important;
+    }
+
+    .button-group {
+        flex-direction: column !important;
+    }
+
+    .button-group .btn {
+        width: 100% !important;
+        min-width: unset !important;
+    }
+}
+
+/* Touch-friendly buttons */
+.btn, button, a {
+    min-height: 44px;
+    min-width: 44px;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* ========================================
+   6. RESPONSIVE TABLES
+   ======================================== */
+
+@media (max-width: 768px) {
+    .threat-table,
+    .report-card table {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    table {
+        min-width: 600px;
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+    }
+
+    th, td {
+        padding: 0.8rem !important;
+        font-size: 0.9rem !important;
+    }
+
+    /* Alternative: Card view for tables */
+    .table-mobile-cards {
+        display: none;
+    }
+
+    @supports (display: grid) {
+        .table-desktop {
+            display: none;
+        }
+
+        .table-mobile-cards {
+            display: block;
+        }
+
+        .table-card {
+            background: rgba(15, 23, 42, 0.6);
+            padding: 1rem;
+            border-radius: 12px;
+            margin-bottom: 1rem;
+            border-left: 3px solid #4cc9f0;
+        }
+
+        .table-card-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .table-card-row:last-child {
+            border-bottom: none;
+        }
+
+        .table-card-label {
+            font-weight: 600;
+            color: #4cc9f0;
+        }
+
+        .table-card-value {
+            color: #e2e8f0;
+            text-align: right;
+        }
+    }
+}
+
+/* ========================================
+   7. RESPONSIVE CARDS & SECTIONS
+   ======================================== */
+
+@media (max-width: 768px) {
+    .scanner-container,
+    .feature-card,
+    .report-card,
+    .chart-container,
+    .landing-box {
+        padding: 1.5rem !important;
+        transform: none !important;
+        margin-bottom: 2rem !important;
+    }
+
+    .scanner-container:hover,
+    .feature-card:hover,
+    .report-card:hover,
+    .chart-container:hover {
+        transform: none !important;
+    }
+
+    .stat-card {
+        padding: 1.5rem !important;
+    }
+
+    .feature-icon {
+        width: 60px !important;
+        height: 60px !important;
+        font-size: 1.5rem !important;
+        transform: none !important;
+    }
+
+    .chart-container {
+        height: 300px !important;
+    }
+
+    .chart-wrapper {
+        height: 250px !important;
+    }
+}
+
+/* ========================================
+   8. LOADING OVERLAY MOBILE FIX
+   ======================================== */
+
+@media (max-width: 768px) {
+    .loading-progress {
+        width: 90% !important;
+        max-width: 350px;
+    }
+
+    .radar-scanner {
+        width: 180px !important;
+        height: 180px !important;
+    }
+
+    .loading-text {
+        font-size: 1.5rem !important;
+    }
+
+    .loading-status {
+        font-size: 1rem !important;
+        padding: 0 1rem;
+    }
+}
+
+/* ========================================
+   9. RESPONSIVE EXPORT LINKS
+   ======================================== */
+
+@media (max-width: 768px) {
+    .export-links {
+        padding: 1.5rem !important;
+    }
+
+    .export-links a {
+        display: block;
+        width: 100%;
+        margin: 0.5rem 0 !important;
+        padding: 1rem !important;
+        text-align: center;
+    }
+}
+
+/* ========================================
+   10. JSON VIEWER & CODE BLOCKS
+   ======================================== */
+
+@media (max-width: 768px) {
+    .json-view,
+    pre {
+        font-size: 0.8rem !important;
+        padding: 1rem !important;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    details {
+        margin-top: 1.5rem !important;
+    }
+
+    summary {
+        font-size: 1rem !important;
+        padding: 1rem !important;
+    }
+}
+
+/* ========================================
+   11. HIDE BACKGROUND CUBES ON MOBILE
+   ======================================== */
+
+@media (max-width: 768px) {
+    .cube,
+    .bg-cubes {
+        display: none !important;
+    }
+}
+
+/* ========================================
+   12. FLASH MESSAGES MOBILE
+   ======================================== */
+
+@media (max-width: 768px) {
+    .flash-messages {
+        padding: 0 1rem;
+    }
+
+    .flash {
+        font-size: 0.9rem;
+        padding: 0.8rem 1rem;
+    }
+}
+
+/* ========================================
+   13. BACK BUTTON MOBILE
+   ======================================== */
+
+@media (max-width: 768px) {
+    .back-btn {
+        width: 50px !important;
+        height: 50px !important;
+        font-size: 1.2rem !important;
+        transform: none !important;
+    }
+
+    .back-btn:hover {
+        transform: none !important;
+    }
+
+    header {
+        gap: 1rem !important;
+        margin-bottom: 2rem !important;
+    }
+}
+
+/* ========================================
+   14. DASHBOARD SPECIFIC
+   ======================================== */
+
+@media (max-width: 768px) {
+    /* Dashboard table/feed layout */
+    div[style*="display: grid"][style*="grid-template-columns: 1fr 1fr"] {
+        grid-template-columns: 1fr !important;
+    }
+
+    .live-feed {
+        max-height: 400px !important;
+    }
+
+    .feed-item {
+        font-size: 0.9rem;
+        padding: 0.8rem;
+    }
+}
+
+/* ========================================
+   15. CLASSIFICATION BADGE
+   ======================================== */
+
+@media (max-width: 768px) {
+    .classification {
+        font-size: 1rem !important;
+        padding: 0.8rem 1.5rem !important;
+        transform: none !important;
+    }
+
+    .classification:hover {
+        transform: none !important;
+    }
+}
+
+/* ========================================
+   16. AI ENRICHMENT SECTION
+   ======================================== */
+
+@media (max-width: 768px) {
+    #enrichment-container,
+    #otx-container {
+        padding: 1.5rem !important;
+        transform: none !important;
+    }
+
+    #enrichment-container:hover {
+        transform: none !important;
+    }
+
+    .enrichment-loading,
+    #otx-loading {
+        padding: 2rem 1rem !important;
+    }
+}
+
+/* ========================================
+   17. GOOGLE SEARCH INTELLIGENCE
+   ======================================== */
+
+@media (max-width: 768px) {
+    /* Make search result cards more compact */
+    div[style*="padding: 1.5rem"][style*="border-left: 3px solid #9f7aea"] {
+        padding: 1rem !important;
+        font-size: 0.9rem;
+    }
+
+    /* Threat/Safe indicator badges */
+    span[style*="padding: 0.6rem 1.2rem"] {
+        padding: 0.5rem 0.8rem !important;
+        font-size: 0.85rem !important;
+    }
+
+    /* Domain tags */
+    span[style*="font-family: monospace"] {
+        font-size: 0.8rem !important;
+        padding: 0.4rem 0.8rem !important;
+    }
+}
+
+/* ========================================
+   18. LANDING PAGE MOBILE
+   ======================================== */
+
+@media (max-width: 768px) {
+    .landing-box {
+        padding: 2rem !important;
+        transform: none !important;
+    }
+
+    .landing-box:hover {
+        transform: none !important;
+    }
+
+    .btn-container {
+        flex-direction: column !important;
+        gap: 1rem !important;
+    }
+
+    .btn-login,
+    .btn-signup {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .logo h1 {
+        font-size: 1.8rem !important;
+    }
+
+    .logo-icon {
+        font-size: 2rem !important;
+    }
+}
+
+/* ========================================
+   19. LOGIN/SIGNUP FORMS
+   ======================================== */
+
+@media (max-width: 768px) {
+    .form-container {
+        margin: 5% auto !important;
+        padding: 2rem !important;
+        max-width: 90% !important;
+    }
+
+    .form-group label {
+        font-size: 0.95rem;
+    }
+
+    .form-group input {
+        font-size: 1rem;
+    }
+}
+
+/* ========================================
+   20. HISTORY PAGE
+   ======================================== */
+
+@media (max-width: 768px) {
+    h1 {
+        font-size: 1.6rem !important;
+        margin-bottom: 1rem;
+    }
+
+    .export-links {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 0.8rem;
+        margin-top: 1.5rem;
+    }
+
+    .export-links a {
+        margin: 0 !important;
+        width: 100%;
+    }
+}
+
+/* ========================================
+   21. ANDROID WEBVIEW OPTIMIZATIONS
+   ======================================== */
+
+/* Prevent zoom on input focus (iOS/Android) */
+@media (max-width: 768px) {
+    input[type="text"],
+    input[type="email"],
+    input[type="password"],
+    textarea,
+    select {
+        font-size: 16px !important; /* Prevents auto-zoom */
+    }
+}
+
+/* Smooth scrolling for Android */
+html {
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Fix for Android keyboard pushing content */
+@media (max-width: 768px) {
+    body {
+        position: relative;
+        min-height: 100vh;
+    }
+}
+
+/* Hardware acceleration */
+.chart-container,
+.report-card,
+.feature-card,
+.scanner-container {
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    will-change: transform;
+}
+
+/* ========================================
+   22. LANDSCAPE MODE (PHONES)
+   ======================================== */
+
+@media (max-width: 896px) and (orientation: landscape) {
+    .container {
+        padding: 1rem 2rem;
+    }
+
+    .navbar {
+        padding: 0.8rem 1.5rem;
+    }
+
+    h1 {
+        font-size: 1.5rem !important;
+    }
+
+    .scanner-container {
+        padding: 1.5rem !important;
+    }
+}
+
+/* ========================================
+   23. VERY SMALL SCREENS (< 360px)
+   ======================================== */
+
+@media (max-width: 360px) {
+    .container {
+        padding: 0.8rem;
+    }
+
+    h1 {
+        font-size: 1.3rem !important;
+    }
+
+    h2 {
+        font-size: 1.1rem !important;
+    }
+
+    .btn {
+        padding: 0.8rem 1rem !important;
+        font-size: 0.9rem !important;
+    }
+
+    .navbar-brand {
+        font-size: 0.9rem !important;
+    }
+
+    .stat-value {
+        font-size: 1.3rem !important;
+    }
+}
+
+/* ========================================
+   24. PRINT STYLES
+   ======================================== */
+
+@media print {
+    .navbar,
+    .back-btn,
+    .export-links,
+    .btn,
+    .cube,
+    .bg-cubes,
+    .navbar-toggle,
+    .flash-messages {
+        display: none !important;
+    }
+
+    body {
+        background: white;
+        color: black;
+    }
+
+    .container {
+        max-width: 100%;
+        padding: 0;
+    }
+}
+
+/* ========================================
+   25. ACCESSIBILITY IMPROVEMENTS
+   ======================================== */
+
+/* Focus visible for keyboard navigation */
+*:focus-visible {
+    outline: 2px solid #4cc9f0;
+    outline-offset: 2px;
+}
+
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .btn {
+        border: 2px solid currentColor;
+    }
+
+    .classification {
+        border: 2px solid white;
+    }
+}

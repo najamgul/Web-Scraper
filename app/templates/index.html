@@ -1,8 +1,16 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0f172a">
+
+<!-- Add responsive CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='responsive.css') }}">
     <title>3D Threat Intelligence Scanner</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -828,26 +836,43 @@
     </div>
     
     <nav class="navbar">
-        <div class="navbar-content">
-            <div class="navbar-brand">
-                <i class="fas fa-shield-alt"></i>
-                <span>Web Scraper For Data Extraction and Threat Intelligence</span>
-            </div>
-            <div class="navbar-user">
-                <a href="{{ url_for('main.dashboard') }}" class="btn btn-secondary">
-                    <i class="fas fa-chart-line"></i> Dashboard
-                </a>
-                <div class="user-info">
-                    <i class="fas fa-user-circle"></i>
-                    <span class="user-email">{{ session.get('username', 'User') }}</span>
-                </div>
-                <a href="{{ url_for('main.logout') }}" class="btn-logout">
-                    <i class="fas fa-sign-out-alt"></i>
-                    Logout
-                </a>
-            </div>
+    <div class="navbar-content">
+        <div class="navbar-brand">
+            <i class="fas fa-shield-alt"></i>
+            <span>Threat Intelligence</span>
         </div>
-    </nav>
+        
+        <button class="navbar-toggle" onclick="toggleMobileMenu()">
+            <i class="fas fa-bars"></i>
+        </button>
+        
+        <div class="navbar-overlay" onclick="toggleMobileMenu()"></div>
+        
+        <div class="navbar-user">
+            <button class="navbar-close" onclick="toggleMobileMenu()">
+                <i class="fas fa-times"></i>
+            </button>
+            <a href="{{ url_for('main.dashboard') }}" class="btn btn-secondary">
+                <i class="fas fa-chart-line"></i> Dashboard
+            </a>
+            <div class="user-info">
+                <i class="fas fa-user-circle"></i>
+                <span class="user-email">{{ session.get('username', 'User') }}</span>
+            </div>
+            <a href="{{ url_for('main.logout') }}" class="btn-logout">
+                <i class="fas fa-sign-out-alt"></i> Logout
+            </a>
+        </div>
+    </div>
+</nav>
+
+<script>
+function toggleMobileMenu() {
+    document.querySelector('.navbar-user').classList.toggle('active');
+    document.querySelector('.navbar-overlay').classList.toggle('active');
+    document.body.style.overflow = document.querySelector('.navbar-user').classList.contains('active') ? 'hidden' : 'auto';
+}
+</script>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
