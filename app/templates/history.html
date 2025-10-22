@@ -68,9 +68,298 @@ tr:hover { background: rgba(76, 201, 240, 0.1); }
     text-decoration: none;
 }
 .export-links a:hover { background: #4cc9f0; }
+/* ========================================
+   BACK BUTTON STYLES
+   ======================================== */
+
+.back-button-container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 1.5rem 2rem 0 2rem;
+}
+
+.back-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.8rem;
+    padding: 0.8rem 1.5rem;
+    background: rgba(30, 41, 59, 0.8);
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    color: #4cc9f0;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(76, 201, 240, 0.3);
+    cursor: pointer;
+    touch-action: manipulation;
+    min-height: 44px;
+}
+
+.back-button:hover {
+    background: rgba(30, 41, 59, 0.95);
+    transform: translateX(-5px);
+    box-shadow: 0 6px 16px rgba(76, 201, 240, 0.3);
+    border-color: rgba(76, 201, 240, 0.5);
+}
+
+.back-button:active {
+    transform: translateX(-2px);
+}
+
+.back-button i {
+    font-size: 1.1rem;
+    transition: transform 0.3s ease;
+}
+
+.back-button:hover i {
+    transform: translateX(-3px);
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+    .back-button-container {
+        padding: 1rem 1rem 0 1rem;
+    }
+    
+    .back-button {
+        font-size: 0.9rem;
+        padding: 0.7rem 1.2rem;
+        gap: 0.6rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .back-button span {
+        display: none; /* Hide text on very small screens */
+    }
+    
+    .back-button {
+        padding: 0.8rem;
+        border-radius: 50%;
+        width: 44px;
+        height: 44px;
+        justify-content: center;
+    }
+    
+    .back-button i {
+        font-size: 1.2rem;
+    }
+}
+.navigation-buttons {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.dashboard-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.8rem;
+    padding: 0.8rem 1.5rem;
+    background: rgba(99, 102, 241, 0.2);
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    color: #a78bfa;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    cursor: pointer;
+    touch-action: manipulation;
+    min-height: 44px;
+}
+
+.dashboard-button:hover {
+    background: rgba(99, 102, 241, 0.3);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(139, 92, 246, 0.3);
+}
+
+.dashboard-button:active {
+    transform: translateY(0);
+}
+
+@media (max-width: 768px) {
+    .navigation-buttons {
+        flex-direction: column;
+        gap: 0.8rem;
+    }
+    
+    .back-button,
+    .dashboard-button {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+@media (max-width: 480px) {
+    .navigation-buttons {
+        flex-direction: row;
+        justify-content: space-between;
+    }
+    
+    .back-button,
+    .dashboard-button {
+        width: auto;
+        flex: 1;
+    }
+    
+    .back-button span,
+    .dashboard-button span {
+        display: none;
+    }
+    
+    .back-button,
+    .dashboard-button {
+        padding: 0.8rem;
+        border-radius: 50%;
+        width: 44px;
+        height: 44px;
+        justify-content: center;
+    }
+}
+.breadcrumbs {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 1rem 2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    font-size: 0.9rem;
+    color: #94a3b8;
+}
+
+.breadcrumbs a {
+    color: #4cc9f0;
+    text-decoration: none;
+    transition: color 0.3s ease;
+}
+
+.breadcrumbs a:hover {
+    color: #4361ee;
+}
+
+.breadcrumbs .current {
+    color: #e2e8f0;
+    font-weight: 600;
+}
+
+.breadcrumbs i.fa-chevron-right {
+    font-size: 0.7rem;
+    color: #64748b;
+}
+
+@media (max-width: 768px) {
+    .breadcrumbs {
+        padding: 0.8rem 1rem;
+        font-size: 0.8rem;
+        gap: 0.5rem;
+    }
+}
+.navigation-buttons {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.dashboard-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.8rem;
+    padding: 0.8rem 1.5rem;
+    background: rgba(99, 102, 241, 0.2);
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    color: #a78bfa;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    cursor: pointer;
+    touch-action: manipulation;
+    min-height: 44px;
+}
+
+.dashboard-button:hover {
+    background: rgba(99, 102, 241, 0.3);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(139, 92, 246, 0.3);
+}
+
+.dashboard-button:active {
+    transform: translateY(0);
+}
+
+@media (max-width: 768px) {
+    .navigation-buttons {
+        flex-direction: column;
+        gap: 0.8rem;
+    }
+    
+    .back-button,
+    .dashboard-button {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+@media (max-width: 480px) {
+    .navigation-buttons {
+        flex-direction: row;
+        justify-content: space-between;
+    }
+    
+    .back-button,
+    .dashboard-button {
+        width: auto;
+        flex: 1;
+    }
+    
+    .back-button span,
+    .dashboard-button span {
+        display: none;
+    }
+    
+    .back-button,
+    .dashboard-button {
+        padding: 0.8rem;
+        border-radius: 50%;
+        width: 44px;
+        height: 44px;
+        justify-content: center;
+    }
+}
 </style>
+
 </head>
 <body>
+    <body>
+<!-- ✅ ADD THIS BACK BUTTON -->
+
+<div class="back-button-container">
+    <div class="navigation-buttons">
+        <a href="{{ url_for('main.index') }}" class="back-button">
+            <i class="fas fa-arrow-left"></i>
+            <span>Back to Scanner</span>
+        </a>
+        <a href="{{ url_for('main.dashboard') }}" class="dashboard-button">
+            <i class="fas fa-chart-line"></i>
+            <span>Dashboard</span>
+        </a>
+    </div>
+</div>
+
+<!-- Existing container -->
+<div class="container">
+    <h1>Your Search History</h1>
+    <!-- rest of your code... -->
 <div class="container">
     <h1>Your Search History</h1>
 
