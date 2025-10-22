@@ -65,9 +65,15 @@ def otx_lookup(query, ioc_type):
 
 
 def _otx_keyword_lookup(keyword):
-    """Search OTX pulses for keyword-based threats"""
+    """
+    ✅ FIXED: Search OTX pulses WITHOUT nested ThreadPoolExecutor
+    Timeout is now handled ONLY by routes.py (40 seconds for keywords)
+    """
     try:
         logger.info(f"   Searching OTX pulses for keyword: {keyword}")
+        
+        # ✅ CRITICAL FIX: Direct call - NO nested ThreadPoolExecutor
+        # The timeout is handled by routes.py's /api/otx endpoint
         results = otx_client.search_pulses(keyword)
         
         if not results or 'results' not in results:
@@ -88,14 +94,14 @@ def _otx_keyword_lookup(keyword):
         pulse_count = len(pulses)
         logger.info(f"   Found {pulse_count} pulses for keyword: {keyword}")
         
-        # Analyze pulses
+        # ✅ Process pulses (limit to 20 for speed)
         malicious_indicators = 0
         malware_families = []
         attack_ids = []
         tags = []
         adversaries = []
         
-        for pulse in pulses[:10]:
+        for pulse in pulses[:20]:  # ← Increased from 15 to 20
             pulse_name = pulse.get('name', '').lower()
             pulse_tags = pulse.get('tags', [])
             tags.extend(pulse_tags)
@@ -119,7 +125,9 @@ def _otx_keyword_lookup(keyword):
                 attack_ids.extend(pulse.get('attack_ids', []))
             
             if 'adversary' in pulse:
-                adversaries.append(pulse.get('adversary', ''))
+                adv = pulse.get('adversary', '')
+                if adv:
+                    adversaries.append(adv)
         
         # Calculate threat score
         threat_score = min(
@@ -173,7 +181,7 @@ def _otx_keyword_lookup(keyword):
             "raw": {
                 "keyword": keyword,
                 "total_pulses": pulse_count,
-                "pulses": pulses[:5]
+                "pulses": pulses[:5]  # Only include first 5 in raw data
             }
         }
     
@@ -301,6 +309,8 @@ def _otx_domain_lookup(domain):
             classification = "Benign"
             risk_level = "Low"
         
+        logger.info(f"   Domain analysis: score={threat_score}, classification={classification}")
+        
         details = {
             "summary": f"Domain {domain} found in {pulse_count} threat reports" if pulse_count > 0 else f"Domain {domain} appears clean",
             "risk_level": risk_level,
@@ -342,6 +352,8 @@ def _otx_url_lookup(url):
         pulse_info = result.get('pulse_info', {})
         pulse_count = pulse_info.get('count', 0)
         
+        logger.info(f"   OTX URL result: {pulse_count} pulses")
+        
         threat_score = min(pulse_count * 12, 100)
         
         if threat_score >= 50:
@@ -356,6 +368,8 @@ def _otx_url_lookup(url):
         else:
             classification = "Benign"
             risk_level = "Low"
+        
+        logger.info(f"   URL analysis: score={threat_score}, classification={classification}")
         
         details = {
             "summary": f"URL found in {pulse_count} threat reports" if pulse_count > 0 else "URL appears clean",
@@ -392,10 +406,13 @@ def _otx_hash_lookup(file_hash):
         hash_length = len(file_hash)
         if hash_length == 32:
             indicator_type = IndicatorTypes.FILE_HASH_MD5
+            hash_type_name = "MD5"
         elif hash_length == 40:
             indicator_type = IndicatorTypes.FILE_HASH_SHA1
+            hash_type_name = "SHA1"
         elif hash_length == 64:
             indicator_type = IndicatorTypes.FILE_HASH_SHA256
+            hash_type_name = "SHA256"
         else:
             return {
                 "error": "Invalid hash length",
@@ -406,12 +423,14 @@ def _otx_hash_lookup(file_hash):
                 "raw": {}
             }
         
-        logger.info(f"   Querying OTX for hash: {file_hash[:16]}...")
+        logger.info(f"   Querying OTX for {hash_type_name} hash: {file_hash[:16]}...")
         result = otx_client.get_indicator_details_full(indicator_type, file_hash)
         
         pulse_info = result.get('pulse_info', {})
         pulse_count = pulse_info.get('count', 0)
         pulses = pulse_info.get('pulses', [])
+        
+        logger.info(f"   OTX hash result: {pulse_count} pulses")
         
         malware_families = []
         for pulse in pulses[:10]:
@@ -427,12 +446,14 @@ def _otx_hash_lookup(file_hash):
             classification = "Benign"
             risk_level = "Low"
         
+        logger.info(f"   Hash analysis: score={threat_score}, classification={classification}")
+        
         details = {
             "summary": f"Hash found in {pulse_count} malware reports" if pulse_count > 0 else "Hash not found in threat database",
             "risk_level": risk_level,
             "pulses": pulse_count,
             "malware_families": list(set(malware_families))[:5],
-            "hash_type": "MD5" if hash_length == 32 else "SHA1" if hash_length == 40 else "SHA256"
+            "hash_type": hash_type_name
         }
         
         return {

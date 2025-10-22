@@ -134,7 +134,9 @@ def generate_with_gemini(context):
         
         safety_settings = [
             {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_ONLY_HIGH"},
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
         ]
         
         # ✅ Add timeout wrapper
@@ -151,13 +153,42 @@ def generate_with_gemini(context):
         with concurrent.futures.ThreadPoolExecutor() as executor:
             future = executor.submit(call_gemini)
             try:
-                response = future.result(timeout=8)  # ← 8 second max
+                response = future.result(timeout=25)  # ← 20 second max
             except concurrent.futures.TimeoutError:
                 logger.warning("Gemini API timeout - using fallback")
                 return get_fallback_explanation(context)
         
-        if not response.text:
-            logger.warning("Gemini returned empty response")
+        # ✅ Better Gemini response handling
+        try:
+            if not response:
+                logger.warning("Gemini returned no response object")
+                return get_fallback_explanation(context)
+    
+    # Check if response was blocked by safety filters
+            if not response.candidates or len(response.candidates) == 0:
+                logger.warning("Gemini response blocked by safety filters")
+                return get_fallback_explanation(context)
+    
+            candidate = response.candidates[0]
+    
+    # Check finish reason (2 = SAFETY, 3 = RECITATION)
+            if candidate.finish_reason in [2, 3]:
+                logger.warning(f"Gemini response blocked: finish_reason={candidate.finish_reason}")
+                return get_fallback_explanation(context)
+    
+    # Get text content
+            if not hasattr(candidate.content, 'parts') or not candidate.content.parts:
+                logger.warning("Gemini response has no content parts")
+                return get_fallback_explanation(context)
+    
+            content = candidate.content.parts[0].text.strip()
+    
+            if not content:
+                logger.warning("Gemini returned empty text")
+                return get_fallback_explanation(context)
+        
+        except AttributeError as e:
+            logger.error(f"Gemini response structure error: {e}")
             return get_fallback_explanation(context)
         
         content = response.text.strip()
@@ -316,9 +347,14 @@ def get_fallback_explanation(context):
     ioc_value = context.get('ioc_value', '')
     ioc_type = context.get('ioc_type', '')
     
+    # ✅ Log why we're using fallback
+    
+    
     vt_summary = context.get('vt_summary', '')
     shodan_summary = context.get('shodan_summary', '')
     otx_summary = context.get('otx_summary', '')
+    
+    logger.info(f"📋 Using fallback explanation for {ioc_type}: {ioc_value} (Classification: {classification})")
     
     # Build summary
     summary = f"This {ioc_type} ({ioc_value}) has been classified as {classification} based on multi-source threat intelligence analysis."

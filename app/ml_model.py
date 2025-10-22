@@ -18,11 +18,11 @@ except FileNotFoundError:
     model = None
 
 
-def classify_threat(vt_data=None, shodan_data=None, otx_data=None, ioc_type=None, user_input=None):
+def classify_threat(vt_data=None, shodan_data=None, otx_data=None, ioc_type=None, user_input=None, google_data=None):
     """
-    Classify threat using reports from VirusTotal, Shodan, and OTX APIs.
+    Classify threat using reports from VirusTotal, Shodan, OTX, and Google APIs.
     
-    ✅ IMPROVED: Better handling of missing data
+    ✅ ENHANCED: Now accepts google_data for keyword classification fallback
     """
     try:
         vt_data = vt_data or {}
@@ -36,58 +36,133 @@ def classify_threat(vt_data=None, shodan_data=None, otx_data=None, ioc_type=None
         logger.info(f"Shodan Data Keys: {list(shodan_data.keys())}")
         logger.info(f"OTX Data Keys: {list(otx_data.keys())}")
         
+        # ✅ CHECK FOR TIMEOUTS
+        vt_timeout = vt_data.get('timeout', False)
+        shodan_timeout = shodan_data.get('timeout', False)
+        otx_timeout = otx_data.get('timeout', False)
+        
+        has_timeout = vt_timeout or shodan_timeout or otx_timeout
+        
+        if has_timeout:
+            logger.warning(f"⚠️ TIMEOUT DETECTED:")
+            logger.warning(f"   VT: {vt_timeout}, Shodan: {shodan_timeout}, OTX: {otx_timeout}")
+        
         # ============================================
-        # FOR KEYWORDS: Use OTX or fallback to Informational
+        # FOR KEYWORDS: Enhanced logic with Google fallback
         # ============================================
         if ioc_type == "keyword":
+            logger.info(f"📝 Processing keyword classification for: {user_input}")
+            
+            # ✅ Check if OTX timed out
+            if otx_timeout:
+                logger.warning(f"⚠️ OTX timeout for keyword '{user_input}'")
+                
+                # ✅ Use Google search as fallback
+                if google_data:
+                    logger.info(f"   Using Google search fallback for classification")
+                    
+                    threat_score = google_data.get('threat_score', 0)
+                    threat_indicators = google_data.get('threat_indicators', [])
+                    
+                    if threat_score >= 60 or len(threat_indicators) >= 5:
+                        classification = "Suspicious"
+                    elif threat_score >= 30 or len(threat_indicators) >= 3:
+                        classification = "Informational"
+                    else:
+                        classification = "Benign"
+                    
+                    logger.info(f"✅ Keyword '{user_input}' classified as '{classification}' based on Google (OTX timeout)")
+                    return classification
+                else:
+                    logger.warning(f"   No Google data available, returning Unknown")
+                    return "Unknown"
+            
             # ✅ Check if OTX has valid data
-            if otx_data and 'classification' in otx_data and otx_data.get('classification') != 'Unknown':
+            if otx_data and 'classification' in otx_data and otx_data.get('classification') not in ['Unknown']:
                 classification = otx_data.get('classification', 'Informational')
+                
+                # ✅ Validate with Google if available
+                if google_data and classification == 'Benign':
+                    google_threat_score = google_data.get('threat_score', 0)
+                    if google_threat_score >= 50:
+                        logger.info(f"   Google shows high threat ({google_threat_score}), upgrading from Benign to Informational")
+                        classification = "Informational"
+                
                 logger.info(f"✅ Keyword '{user_input}' classified as '{classification}' based on OTX")
                 return classification
             
-            # ✅ Check if OTX has error or empty data
+            # ✅ OTX has no data or error
             if 'error' in otx_data or not otx_data or otx_data.get('source_count', 0) == 0:
-                logger.info(f"⚠️  No OTX data for keyword '{user_input}', defaulting to Informational")
-                return "Informational"  # ← Changed from "Unknown"
+                logger.info(f"⚠️ No OTX data for keyword '{user_input}'")
+                
+                # ✅ Use OTX threat score if available
+                threat_score = otx_data.get('threat_score', 0)
+                
+                if threat_score > 0:
+                    if threat_score >= 70:
+                        return "Malicious"
+                    elif threat_score >= 40:
+                        return "Suspicious"
+                    else:
+                        return "Informational"
+                
+                # ✅ Fallback to Google
+                if google_data:
+                    threat_score = google_data.get('threat_score', 0)
+                    threat_indicators = google_data.get('threat_indicators', [])
+                    
+                    if threat_score >= 60 or len(threat_indicators) >= 5:
+                        classification = "Suspicious"
+                    elif threat_score >= 30 or len(threat_indicators) >= 3:
+                        classification = "Informational"
+                    else:
+                        classification = "Benign"
+                    
+                    logger.info(f"✅ Keyword '{user_input}' classified as '{classification}' based on Google")
+                    return classification
+                
+                # Absolute fallback
+                logger.info(f"   Defaulting to Informational")
+                return "Informational"
             
-            # ✅ Fallback: Use OTX threat score
+            # ✅ Use OTX threat score
             threat_score = otx_data.get('threat_score', 0)
             if threat_score >= 70:
-                classification = "Malicious"
+                return "Malicious"
             elif threat_score >= 40:
-                classification = "Suspicious"
+                return "Suspicious"
             elif threat_score > 0:
-                classification = "Informational"
+                return "Informational"
             else:
-                classification = "Informational"  # ← Changed from "Unknown"
-            
-            logger.info(f"✅ Keyword classified as '{classification}' (OTX score: {threat_score})")
-            return classification
+                return "Benign"
 
         # ============================================
-        # FOR OTHER IOC TYPES: Use Random Forest
+        # FOR OTHER IOC TYPES: Use ML or Fallback
         # ============================================
         
         # Extract VirusTotal features
         vt_malicious = 0
         vt_suspicious = 0
+        vt_has_data = False
         
-        if "error" not in vt_data:
+        if not vt_timeout and "error" not in vt_data:
             stats = vt_data.get("last_analysis_stats", {})
             if not stats:
                 stats = vt_data.get("data", {}).get("attributes", {}).get("last_analysis_stats", {})
             
-            vt_malicious = stats.get("malicious", 0)
-            vt_suspicious = stats.get("suspicious", 0)
+            if stats:
+                vt_malicious = stats.get("malicious", 0)
+                vt_suspicious = stats.get("suspicious", 0)
+                vt_has_data = True
         
-        logger.info(f"📊 VT Stats: Malicious={vt_malicious}, Suspicious={vt_suspicious}")
+        logger.info(f"📊 VT Stats: Malicious={vt_malicious}, Suspicious={vt_suspicious}, HasData={vt_has_data}, Timeout={vt_timeout}")
 
         # Extract Shodan features
         port_count = 0
         vuln_count = 0
+        shodan_has_data = False
         
-        if "error" not in shodan_data:
+        if not shodan_timeout and "error" not in shodan_data and ioc_type == "ip":
             ports = shodan_data.get("ports", [])
             if isinstance(ports, list):
                 port_count = len(ports)
@@ -97,19 +172,26 @@ def classify_threat(vt_data=None, shodan_data=None, otx_data=None, ioc_type=None
                 vuln_count = len(vulns.keys())
             elif isinstance(vulns, list):
                 vuln_count = len(vulns)
+            
+            if port_count > 0 or vuln_count > 0:
+                shodan_has_data = True
         
-        logger.info(f"📊 Shodan Stats: Ports={port_count}, Vulns={vuln_count}")
+        logger.info(f"📊 Shodan Stats: Ports={port_count}, Vulns={vuln_count}, HasData={shodan_has_data}, Timeout={shodan_timeout}")
 
         # Extract OTX features
         otx_threat_score = 0
         is_otx_malicious = 0
+        otx_has_data = False
         
-        if "error" not in otx_data:
+        if not otx_timeout and "error" not in otx_data:
             otx_threat_score = otx_data.get("threat_score", 0)
             otx_classification = otx_data.get("classification", "").lower()
             is_otx_malicious = 1 if otx_classification in ["malicious", "suspicious"] else 0
+            
+            if otx_threat_score > 0 or otx_data.get('source_count', 0) > 0:
+                otx_has_data = True
         
-        logger.info(f"📊 OTX Stats: ThreatScore={otx_threat_score}, IsMalicious={is_otx_malicious}")
+        logger.info(f"📊 OTX Stats: ThreatScore={otx_threat_score}, IsMalicious={is_otx_malicious}, HasData={otx_has_data}, Timeout={otx_timeout}")
 
         # Feature vector
         features = [
@@ -123,103 +205,146 @@ def classify_threat(vt_data=None, shodan_data=None, otx_data=None, ioc_type=None
         
         logger.info(f"🔢 Feature Vector: {features}")
 
-        # ✅ IMPROVED: Better handling when all features are zero
+        # ✅ IMPROVED: Handle cases where data is missing due to timeouts
+        data_sources_available = sum([vt_has_data, shodan_has_data, otx_has_data])
+        timeouts_occurred = sum([vt_timeout, shodan_timeout, otx_timeout])
+        
+        logger.info(f"📈 Data Quality: {data_sources_available}/3 sources have data, {timeouts_occurred} timeouts")
+        
+        # ✅ If all features are zero, check WHY
         if all(f == 0 for f in features):
-            logger.warning(f"⚠️  ALL FEATURES ARE ZERO")
+            if timeouts_occurred >= 2:
+                # Too many timeouts - can't make reliable decision
+                logger.warning(f"⚠️ INSUFFICIENT DATA: {timeouts_occurred} timeouts, returning Unknown")
+                return "Unknown"
             
-            # Check if APIs actually returned data or just errors
-            has_vt_data = vt_data and "error" not in vt_data and vt_data.get("last_analysis_stats")
-            has_shodan_data = shodan_data and "error" not in shodan_data
-            has_otx_data = otx_data and "error" not in otx_data
-            
-            if has_vt_data or has_shodan_data or has_otx_data:
-                # APIs returned data but it's all clean
-                logger.info(f"✅ APIs returned clean data - classifying as Benign")
+            if data_sources_available >= 1:
+                # At least one source returned clean data
+                logger.info(f"✅ {data_sources_available} sources returned clean data - classifying as Benign")
                 return "Benign"
             else:
-                # APIs didn't return useful data
-                logger.warning(f"⚠️  No useful API data - classifying as Informational")
-                return "Informational"  # ← Changed from "Unknown"
-
-        # Use Random Forest model
-        if model is not None:
-            try:
-                prediction = model.predict([features])[0]
-                proba = model.predict_proba([features])[0]
-                classification = "Malicious" if int(prediction) == 1 else "Benign"
-                
-                logger.info(f"🤖 Model Prediction: {classification}")
-                logger.info(f"   Confidence: Benign={proba[0]:.2%}, Malicious={proba[1]:.2%}")
-                logger.info(f"{'='*80}\n")
-                
-                return classification
-            except Exception as e:
-                logger.error(f"❌ Model prediction error: {e}")
-
+                # No data from any source (all errors or no response)
+                logger.warning(f"⚠️ NO USEFUL DATA from any source - returning Informational")
+                return "Informational"
+        
+        # ✅ If we have at least some data, use ML model or rules
+        if data_sources_available >= 1:
+            # Use ML model if available
+            if model is not None:
+                try:
+                    prediction = model.predict([features])[0]
+                    proba = model.predict_proba([features])[0]
+                    classification = "Malicious" if int(prediction) == 1 else "Benign"
+                    
+                    # ✅ Override if we have high confidence from OTX but ML says benign
+                    if classification == "Benign" and otx_threat_score >= 70:
+                        logger.info(f"🔄 Overriding ML (Benign) with OTX high threat score ({otx_threat_score})")
+                        classification = "Malicious"
+                    
+                    logger.info(f"🤖 Model Prediction: {classification}")
+                    logger.info(f"   Confidence: Benign={proba[0]:.2%}, Malicious={proba[1]:.2%}")
+                    logger.info(f"   Data sources used: {data_sources_available}/3")
+                    logger.info(f"{'='*80}\n")
+                    
+                    return classification
+                except Exception as e:
+                    logger.error(f"❌ Model prediction error: {e}")
+        
         # Fallback: Rule-based classification
-        result = rule_based_classification(features, ioc_type)
-        logger.info(f"📋 Rule-Based Result: {result}")
+        result = rule_based_classification(features, ioc_type, data_sources_available, timeouts_occurred)
+        logger.info(f"📋 Rule-Based Result: {result} (based on {data_sources_available} sources)")
         logger.info(f"{'='*80}\n")
         return result
 
     except Exception as e:
         logger.error(f"❌ Classification error for '{user_input}': {e}", exc_info=True)
-        return "Informational"  # ← Changed from "Unknown"
+        return "Unknown"
 
 
-def rule_based_classification(features, ioc_type):
-    """Rule-based fallback classification"""
+def rule_based_classification(features, ioc_type, data_sources_available=0, timeouts_occurred=0):
+    """
+    ✅ IMPROVED: Rule-based fallback classification with timeout awareness
+    """
     vt_malicious, vt_suspicious, port_count, vuln_count, otx_score, is_otx_malicious = features
     
     logger.info(f"📋 Applying rule-based classification...")
+    logger.info(f"   Data sources: {data_sources_available}, Timeouts: {timeouts_occurred}")
+    
+    # ✅ If too many timeouts, be conservative
+    if timeouts_occurred >= 2:
+        logger.info(f"   ⚠️ Too many timeouts ({timeouts_occurred}) - returning Unknown")
+        return "Unknown"
     
     score = 0
     
-    # VirusTotal weight
-    if vt_malicious >= 5:
+    # VirusTotal weight (50 points max)
+    if vt_malicious >= 10:
+        score += 50
+        logger.info(f"   +50 points: VT malicious >= 10 ({vt_malicious})")
+    elif vt_malicious >= 5:
         score += 40
         logger.info(f"   +40 points: VT malicious >= 5 ({vt_malicious})")
     elif vt_malicious >= 2:
-        score += 20
-        logger.info(f"   +20 points: VT malicious >= 2 ({vt_malicious})")
+        score += 25
+        logger.info(f"   +25 points: VT malicious >= 2 ({vt_malicious})")
     elif vt_malicious > 0:
-        score += 10
-        logger.info(f"   +10 points: VT malicious > 0 ({vt_malicious})")
+        score += 15
+        logger.info(f"   +15 points: VT malicious > 0 ({vt_malicious})")
     
-    # Shodan weight (only for IPs)
+    if vt_suspicious >= 5:
+        score += 10
+        logger.info(f"   +10 points: VT suspicious >= 5 ({vt_suspicious})")
+    
+    # Shodan weight (25 points max) - only for IPs
     if ioc_type == "ip":
         if vuln_count >= 10:
-            score += 30
-            logger.info(f"   +30 points: Vulns >= 10 ({vuln_count})")
+            score += 25
+            logger.info(f"   +25 points: Vulns >= 10 ({vuln_count})")
         elif vuln_count >= 5:
-            score += 20
-            logger.info(f"   +20 points: Vulns >= 5 ({vuln_count})")
+            score += 15
+            logger.info(f"   +15 points: Vulns >= 5 ({vuln_count})")
         elif vuln_count > 0:
             score += 10
             logger.info(f"   +10 points: Vulns > 0 ({vuln_count})")
     
-    # OTX weight
-    if otx_score >= 70 or is_otx_malicious:
-        score += 30
-        logger.info(f"   +30 points: OTX score >= 70 or is_malicious")
-    elif otx_score >= 40:
+    # OTX weight (25 points max)
+    if is_otx_malicious:
+        score += 25
+        logger.info(f"   +25 points: OTX classified as malicious")
+    elif otx_score >= 70:
         score += 20
-        logger.info(f"   +20 points: OTX score >= 40 ({otx_score})")
+        logger.info(f"   +20 points: OTX score >= 70 ({otx_score})")
+    elif otx_score >= 40:
+        score += 15
+        logger.info(f"   +15 points: OTX score >= 40 ({otx_score})")
+    elif otx_score >= 10:
+        score += 5
+        logger.info(f"   +5 points: OTX score >= 10 ({otx_score})")
     
     logger.info(f"   Total Score: {score}/100")
     
-    # Classify
-    if score >= 60:
-        return "Malicious"
-    elif score >= 20:  # ← Lowered threshold
-        return "Suspicious"
-    elif score > 0:
-        return "Informational"
+    # ✅ Adjusted thresholds based on data availability
+    if data_sources_available == 1:
+        # Only one source - be more conservative
+        if score >= 70:
+            return "Malicious"
+        elif score >= 30:
+            return "Suspicious"
+        elif score > 0:
+            return "Informational"
+        else:
+            return "Benign"
     else:
-        return "Benign"
+        # Multiple sources - normal thresholds
+        if score >= 60:
+            return "Malicious"
+        elif score >= 25:
+            return "Suspicious"
+        elif score > 0:
+            return "Informational"
+        else:
+            return "Benign"
 
-
-# ... rest of your ml_model.py code (train_model_if_needed, etc.) ...
 
 def train_model_if_needed():
     """Train model if not found"""

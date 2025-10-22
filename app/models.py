@@ -18,7 +18,7 @@ class IOCResult(Document):
     
     input_value = StringField(required=True, max_length=255)
     type = StringField(required=True, max_length=50)
-    classification = StringField(required=True, max_length=50)
+    classification = StringField(required=False, default="Pending")
     vt_report = DictField()
     shodan_report = DictField()
     otx_report = DictField()

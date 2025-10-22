@@ -9,6 +9,8 @@ import logging
 import hashlib
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 from datetime import datetime, timedelta
+import time  # Should already be there
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 
 from app.enrichment import enrich_threat_intelligence
 from flask import session, Blueprint, render_template, request, jsonify, send_file, redirect, url_for, flash
@@ -127,7 +129,7 @@ def fetch_all_threat_data(user_input, ioc_type):
                         logger.warning(f"   ⚠️ Shodan error: {results['shodan_data']['error']}")
                     
                 elif key == 'otx':
-                    result = future.result(timeout=15)
+                    result = future.result(timeout=20)
                     results['otx_data'] = result or {}
                     logger.info(f"   ✅ OTX returned: {len(str(result))} chars, classification: {result.get('classification', 'N/A')}")
                     if 'error' in results['otx_data']:
@@ -320,6 +322,25 @@ def format_google_for_display(scraped_data):
     
     return formatted
 
+def classify_keyword_from_google(google_formatted):
+    """
+    Fallback classification for keywords based on Google search results
+    Used when OTX times out or returns no data
+    """
+    if not google_formatted:
+        return "Informational"
+    
+    threat_score = google_formatted.get('threat_score', 0)
+    threat_indicators = google_formatted.get('threat_indicators', [])
+    
+    # Use Google threat score as fallback
+    if threat_score >= 60 or len(threat_indicators) >= 5:
+        return "Suspicious"  # Conservative - need OTX confirmation for "Malicious"
+    elif threat_score >= 30 or len(threat_indicators) >= 3:
+        return "Informational"
+    else:
+        return "Benign"
+
 
 main_bp = Blueprint("main", __name__)
 
@@ -384,24 +405,60 @@ def index():
         logger.info(f"🚀 Starting PARALLEL API fetch for {ioc_type}: {user_input}")
         start_time = datetime.utcnow()
         
-        api_results = fetch_all_threat_data(user_input, ioc_type)
         
-        vt_data = api_results['vt_data']
-        shodan_data = api_results['shodan_data']
-        otx_data = api_results['otx_data']
-        scraped_data = api_results['scraped_data']
-        
+        # ✅ OPTIMIZED: Skip OTX on initial load, fetch via AJAX
+        logger.info(f"🚀 Starting FAST API fetch (VT + Shodan only)")
+        start_time = datetime.utcnow()
+
+# Fetch only VT, Shodan, and Google (skip OTX)
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {}
+
+            # VirusTotal
+            if ioc_type == "ip":
+                futures['vt'] = executor.submit(vt_lookup_ip, user_input)
+            elif ioc_type == "url":
+                futures['vt'] = executor.submit(vt_lookup_url, user_input)
+            elif ioc_type in ["domain", "hash"]:
+                futures['vt'] = executor.submit(vt_lookup_domain, user_input)
+
+            # Shodan (only for IPs)
+            if ioc_type == "ip":
+                futures['shodan'] = executor.submit(shodan_lookup, user_input)
+
+            # Google (only for keywords)
+            if ioc_type == "keyword":
+                futures['google'] = executor.submit(google_cse_search, user_input)
+
+            # Collect results with timeout
+            vt_data = {}
+            shodan_data = {}
+            scraped_data = []
+
+            for key, future in futures.items():
+                try:
+                    if key == 'vt':
+                        vt_data = future.result(timeout=15) or {}
+                    elif key == 'shodan':
+                        shodan_data = future.result(timeout=15) or {}
+                    elif key == 'google':
+                        scraped_data = future.result(timeout=20) or []
+                except Exception as e:
+                    logger.error(f"Error fetching {key}: {e}")
+
+# ✅ OTX will be loaded via AJAX
+        otx_data = {'loading': True}  # Placeholder
+
         elapsed = (datetime.utcnow() - start_time).total_seconds()
-        logger.info(f"⏱️  API fetch completed in {elapsed:.2f} seconds")
+        logger.info(f"⏱️ Fast API fetch completed in {elapsed:.2f} seconds (OTX will load via AJAX)")
+
+        
+    
         
         # ML Classification (fast)
-        classification = classify_threat(
-            vt_data=vt_data,
-            shodan_data=shodan_data,
-            otx_data=otx_data,
-            ioc_type=ioc_type,
-            user_input=user_input
-        )
+        # ML Classification
+# ✅    # ✅ SKIP ML classification on initial load - will be done via AJAX after OTX loads
+        classification = None # Placeholder
         
         # ✅ CRITICAL: Skip AI enrichment entirely on page load
         # It will be loaded via AJAX after results page renders
@@ -420,9 +477,9 @@ def index():
             type=ioc_type,
             vt_report=vt_data,
             shodan_report=shodan_data,
-            otx_report=otx_data,
+            otx_report={'loading': True},
             scraped_data=scraped_data,
-            classification=classification,
+            classification=None,  # ← Will be populated by AJAX
             enrichment_context=None,  # ← Will be populated by AJAX
             user_id=user_ref,
             timestamp=datetime.utcnow()
@@ -446,12 +503,12 @@ def index():
             "type": ioc_type,
             "vt": vt_data,
             "shodan": shodan_data,
-            "otx": otx_data,
-            "google_formatted": format_google_for_display(scraped_data),
-            "otx_formatted": format_otx_for_display(otx_data),
+            "otx": otx_data,  # Will be {'loading': True}
+            "otx_formatted": None,  # Will be loaded via AJAX
             "scraped": scraped_data,
-            "classification": classification,
-            "enrichment": None  # ← Will trigger AJAX load in template
+            "google_formatted": format_google_for_display(scraped_data) if scraped_data else None,
+            "classification": classification,  # Will be "Loading..."
+            "enrichment": None
         }
         
         # CACHE THE RESULT
@@ -467,51 +524,244 @@ def index():
     
     return render_template("index.html", form=form)
 
-# ✅ NEW: AJAX Endpoint for Lazy Loading Enrichment
-@main_bp.route("/api/enrichment/<ioc_id>", methods=["GET"])
+
+
+# ✅ NEW: AJAX Endpoint for Lazy Loading OTX Data
+@main_bp.route("/api/otx/<ioc_id>", methods=["GET"])
 @login_required
-def get_enrichment(ioc_id):
+def get_otx_data(ioc_id):
     """
-    AJAX endpoint to load AI enrichment after page renders
+    AJAX endpoint to load OTX data after page renders
+    """
+    try:
+        logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        logger.info(f"🔄 AJAX: /api/otx/{ioc_id} CALLED")
+        logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        ioc_result = IOCResult.objects.get(id=ioc_id)
+        
+        # Check if OTX data already exists and is valid
+        otx_data = ioc_result.otx_report or {}
+        
+        # If already loaded and not timed out, return cached
+        if otx_data and 'timeout' not in otx_data and 'error' not in otx_data and otx_data.get('source_count', 0) > 0:
+            logger.info(f"✅ Returning cached OTX data for {ioc_id}")
+            return jsonify({
+                'status': 'complete',
+                'otx_data': otx_data,
+                'otx_formatted': format_otx_for_display(otx_data)
+            })
+        
+        # Generate OTX data now
+        logger.info(f"🔄 Fetching OTX data for {ioc_id}")
+        
+        # Fetch with extended timeout for keywords
+        from app.otx_api import otx_lookup
+        
+        otx_timeout = 40 if ioc_result.type == "keyword" else 20
+        
+        def fetch_otx():
+            return otx_lookup(ioc_result.input_value, ioc_result.type)
+        
+        # Use ThreadPoolExecutor with timeout
+        from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+        
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(fetch_otx)
+            try:
+                otx_data = future.result(timeout=otx_timeout)
+            except FutureTimeoutError:
+                logger.warning(f"⏱️ OTX timeout after {otx_timeout}s for {ioc_id} ({ioc_result.type})")
+                otx_data = {
+                    'error': 'OTX request timeout',
+                    'timeout': True,
+                    'threat_score': 0,
+                    'classification': 'Unknown'
+                }
+        
+        # Save to database
+        ioc_result.otx_report = otx_data
+        ioc_result.save()
+        
+        logger.info(f"✅ OTX data fetched for {ioc_id}")
+        
+        return jsonify({
+            'status': 'complete',
+            'otx_data': otx_data,
+            'otx_formatted': format_otx_for_display(otx_data)
+        })
+    
+    except Exception as e:
+        logger.error(f"❌ OTX fetch error: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+
+# ✅ NEW: AJAX Endpoint for ML Classification (after OTX loads)
+@main_bp.route("/api/classify/<ioc_id>", methods=["GET"])
+@login_required
+def get_classification(ioc_id):
+    """
+    AJAX endpoint to run ML classification after OTX data is available
     """
     try:
         ioc_result = IOCResult.objects.get(id=ioc_id)
         
+        # Check if classification already exists
+        if ioc_result.classification and ioc_result.classification not in [None, 'Unknown', 'Loading...', 'Pending']:
+            logger.info(f"✅ Returning cached classification for {ioc_id}: {ioc_result.classification}")
+            return jsonify({
+                'status': 'complete',
+                'classification': ioc_result.classification
+            })
+        
+        # Run classification now
+        logger.info(f"🤖 Running ML classification for {ioc_id}")
+        
+        # Get all data
+        vt_data = ioc_result.vt_report or {}
+        shodan_data = ioc_result.shodan_report or {}
+        otx_data = ioc_result.otx_report or {}
+        
+        # For keywords, prepare Google data
+        google_formatted = None
+        if ioc_result.type == "keyword" and ioc_result.scraped_data:
+            google_formatted = format_google_for_display(ioc_result.scraped_data)
+        
+        # Run classification
+        classification = classify_threat(
+            vt_data=vt_data,
+            shodan_data=shodan_data,
+            otx_data=otx_data,
+            ioc_type=ioc_result.type,
+            user_input=ioc_result.input_value,
+            google_data=google_formatted
+        )
+        
+        # Save to database
+        logger.info(f"💾 Saving classification to database...")
+        ioc_result.classification = classification
+        ioc_result.save()
+        logger.info(f"✅ Classification SAVED to database: {classification}")
+
+# ✅ Verify it was saved
+        ioc_result.reload()
+        logger.info(f"✅ Verified in DB: {ioc_result.classification}")
+        
+        return jsonify({
+            'status': 'complete',
+            'classification': classification
+        })
+    
+    except Exception as e:
+        logger.error(f"❌ Classification error: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+# ✅ NEW: AJAX Endpoint for Lazy Loading Enrichment
+@main_bp.route("/api/enrichment/<ioc_id>", methods=["GET"])
+@login_required
+def get_enrichment(ioc_id):
+    """AJAX endpoint to load AI enrichment after page renders"""
+    try:
+        logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        logger.info(f"🧠 AJAX: /api/enrichment/{ioc_id} CALLED")
+        logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        
+        ioc_result = IOCResult.objects.get(id=ioc_id)
+        
+        logger.info(f"📊 Current IOC state:")
+        logger.info(f"   Classification: {ioc_result.classification}")
+        logger.info(f"   Has OTX data: {bool(ioc_result.otx_report)}")
+        logger.info(f"   Has enrichment: {bool(ioc_result.enrichment_context)}")
+        
+        # ✅ CRITICAL: Check if classification is valid
+        if not ioc_result.classification or ioc_result.classification in ['Loading...', None, 'Unknown', 'Pending', '']:
+            current_cls = ioc_result.classification or 'None'
+            logger.warning(f"⚠️ ⚠️ ⚠️ Classification NOT ready: '{current_cls}' - Returning 400")
+            return jsonify({
+                'status': 'waiting',
+                'error': f'Classification is {current_cls}. Waiting for ML analysis to complete.',
+                'current_classification': current_cls
+            }), 400
+        
+        logger.info(f"✅ Classification is VALID: {ioc_result.classification}")
+        
         # Check if enrichment already exists
         enrichment = ioc_result.enrichment_context or {}
         
+        # ✅ If enrichment exists but contains invalid text, regenerate
         if enrichment and not enrichment.get('loading'):
-            logger.info(f"✅ Returning cached enrichment for {ioc_id}")
-            return jsonify({
-                'status': 'complete',
-                'enrichment': enrichment
-            })
+            summary = enrichment.get('summary', '')
+            why_malicious = enrichment.get('why_malicious', '')
+            
+            # Check for invalid classification strings in text
+            invalid_strings = ['Pending', 'Loading...', 'Loading']
+            has_invalid = any(inv in summary or inv in why_malicious for inv in invalid_strings)
+            
+            if has_invalid:
+                logger.warning(f"⚠️ Enrichment contains invalid text (Pending/Loading), regenerating...")
+                enrichment = {}  # Force regeneration
+            else:
+                logger.info(f"✅ Returning cached enrichment for {ioc_id}")
+                return jsonify({
+                    'status': 'complete',
+                    'enrichment': enrichment
+                })
         
         # Generate enrichment now
-        logger.info(f"🧠 Generating enrichment for {ioc_id}")
+        logger.info(f"🔍 Generating fresh enrichment for {ioc_id}")
         
         ENABLE_AI_ENRICHMENT = os.getenv('ENABLE_ENRICHMENT', 'true').lower() == 'true'
         
         if ENABLE_AI_ENRICHMENT:
             try:
-                enrichment = enrich_threat_intelligence(
-                    ioc_value=ioc_result.input_value,
-                    ioc_type=ioc_result.type,
-                    vt_data=ioc_result.vt_report,
-                    shodan_data=ioc_result.shodan_report,
-                    otx_data=ioc_result.otx_report,
-                    classification=ioc_result.classification
-                )
+                from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+                
+                def generate_enrichment():
+                    return enrich_threat_intelligence(
+                        ioc_value=ioc_result.input_value,
+                        ioc_type=ioc_result.type,
+                        vt_data=ioc_result.vt_report,
+                        shodan_data=ioc_result.shodan_report,
+                        otx_data=ioc_result.otx_report,
+                        classification=ioc_result.classification
+                    )
+                
+                # 30 second timeout for AI enrichment
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(generate_enrichment)
+                    try:
+                        enrichment = future.result(timeout=30)
+                        logger.info(f"✅ Enrichment generated successfully")
+                    except FutureTimeoutError:
+                        logger.warning(f"⏱️ Enrichment timeout after 30s")
+                        enrichment = {
+                            'summary': f'AI analysis timed out. This {ioc_result.type} was classified as {ioc_result.classification}.',
+                            'why_malicious': f'This {ioc_result.type} was classified as {ioc_result.classification} based on threat intelligence data. AI-powered detailed analysis was unavailable due to timeout.',
+                            'key_indicators': ['Classified using ML model', 'Multiple threat intelligence sources consulted'],
+                            'recommendation': 'Review threat intelligence data manually for detailed analysis.',
+                            'confidence': 'Medium'
+                        }
+                        
             except Exception as e:
-                logger.error(f"Enrichment error: {e}")
+                logger.error(f"❌ Enrichment generation error: {e}", exc_info=True)
                 enrichment = {
-                    'summary': 'AI enrichment failed. Please try again.',
+                    'summary': f'This {ioc_result.type} was classified as {ioc_result.classification}.',
+                    'why_malicious': f'Classification: {ioc_result.classification}. AI analysis encountered an error.',
+                    'key_indicators': ['Manual review recommended'],
+                    'recommendation': 'Refer to threat intelligence reports above.',
                     'confidence': 'Low',
                     'error': str(e)
                 }
         else:
             enrichment = {
-                'summary': 'AI enrichment disabled for faster scanning',
+                'summary': f'This {ioc_result.type} was classified as {ioc_result.classification}.',
+                'why_malicious': f'AI enrichment is disabled. Classification: {ioc_result.classification}.',
+                'key_indicators': ['Classification based on threat intelligence'],
+                'recommendation': 'Review threat intelligence data above.',
                 'confidence': 'Medium'
             }
         
@@ -519,22 +769,25 @@ def get_enrichment(ioc_id):
         ioc_result.enrichment_context = enrichment
         ioc_result.save()
         
-        logger.info(f"✅ Enrichment completed for {ioc_id}")
+        logger.info(f"💾 Enrichment saved to database for {ioc_id}")
         
         return jsonify({
             'status': 'complete',
             'enrichment': enrichment
         })
     
+    except IOCResult.DoesNotExist:
+        logger.error(f"❌ IOC {ioc_id} not found")
+        return jsonify({
+            'status': 'error',
+            'error': 'IOC not found'
+        }), 404
     except Exception as e:
-        logger.error(f"Enrichment API error: {e}", exc_info=True)
+        logger.error(f"❌ Enrichment API error for {ioc_id}: {e}", exc_info=True)
         return jsonify({
             'status': 'error',
             'error': str(e)
         }), 500
-
-
-# ... rest of your routes (feedback, export, history, login, signup, dashboard, logout) ...
 
 # ---- FEEDBACK (Protected) ----
 @main_bp.route("/feedback/<ioc_id>", methods=["POST"])
