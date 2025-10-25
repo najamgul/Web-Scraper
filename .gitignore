@@ -4,20 +4,59 @@ __pycache__/
 *.pyo
 *.pyd
 
+# Bytecode and interpreter state
+*.py[cod]
+*$py.class
+
 # Ignore virtual environment folder
 venv/
 venv
 .venv
+
+# Build and packaging artifacts
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Coverage, testing, and profiling outputs
+.pytest_cache/
+.coverage
+coverage/
+htmlcov/
+*.prof
+
+# Type checker caches
+.mypy_cache/
+.ruff_cache/
+.pytype/
+
+# OS / editor clutter
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
 
 # Ignore local settings and IDE files
 .env
 *.sqlite3
 *.db
 *.log
-.idea/
-.vscode/
-.git
 
 # Ignore database and virtual environment
 instance/database.db
 venv/
+
+# Application runtime artifacts
+instance/*.sqlite
+instance/*.db
+exports/
+reports/
+exports/**/*.pdf
+exports/**/*.csv
+exports/**/*.xlsx
+
+# Ignore temporary markdown notes but keep primary README files
+*.md
+!README.md

@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -345,19 +344,20 @@
             padding: 1rem 2rem;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            position: sticky;
-            top: 0;
-            z-index: 100;
+            position: relative !important;
+            top: auto !important;
         }
 
         .navbar-content {
             max-width: 1200px;
             margin: 0 auto;
             display: flex;
+            flex-direction: row;
             justify-content: space-between;
             align-items: center;
+            gap: 2rem;
         }
-
+        
         .navbar-brand {
             display: flex;
             align-items: center;
@@ -365,7 +365,7 @@
             font-size: 1.3rem;
             font-weight: 700;
             background: linear-gradient(135deg, #4361ee 0%, #4cc9f0 100%);
-            -webkit-background-clip: text;
+            --webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
@@ -376,8 +376,18 @@
 
         .navbar-user {
             display: flex;
+            flex-direction: row;
             align-items: center;
             gap: 1.5rem;
+            position: static;
+            width: auto;
+            height: auto;
+            background: transparent;
+            --webkit-backdrop-filter: none;
+            padding: 0;
+            box-shadow: none;
+            overflow-y: visible;
+            margin-left: auto;
         }
 
         .user-info {
@@ -808,6 +818,42 @@
                 height: 200px;
             }
         }
+        @media (max-width: 540px) {
+            header {
+                margin-top: 1.5rem;
+            }
+            h1 {
+                font-size: 1.9rem;
+            }
+            .subtitle {
+                font-size: 1rem;
+            }
+            .navbar-title {
+                font-size: 0.78rem;
+                line-height: 1.2;
+            }
+            .scanner-container,
+            .feature-card {
+                padding: 1.6rem;
+                margin-bottom: 1.5rem;
+            }
+            textarea,
+            input[type="text"] {
+                font-size: 1rem;
+                padding: 1.2rem 1.2rem 1.2rem 3.2rem;
+            }
+            .button-group {
+                gap: 0.8rem;
+            }
+            .button-group .btn {
+                min-width: unset;
+            }
+            .feature-icon {
+                width: 56px;
+                height: 56px;
+                font-size: 1.4rem;
+            }
+        }
     </style>
     <style>
     /* ========================================
@@ -816,8 +862,56 @@
     
     /* Remove sticky positioning - let it scroll naturally */
     .navbar {
-        position: relative !important; /* Changed from sticky */
+        position: relative !important;
         top: auto !important;
+    }
+    
+    /* ✅ DESKTOP: Horizontal layout with space-between */
+    .navbar-content {
+        max-width: 1200px;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+        gap: 2rem;
+    }
+    
+    /* ✅ DESKTOP: Brand stays on left */
+    .navbar-brand {
+        display: flex;
+        align-items: center;
+        gap: 0.8rem;
+        font-size: 1.3rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, #4361ee 0%, #4cc9f0 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+    
+    /* ✅ DESKTOP: Navbar user section - aligned to right */
+    .navbar-user {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 1.5rem;
+        position: static;
+        width: auto;
+        height: auto;
+        background: transparent;
+        backdrop-filter: none;
+        padding: 0;
+        box-shadow: none;
+        overflow-y: visible;
+        margin-left: auto;
+    }
+    
+    /* ✅ DESKTOP: Menu items container */
+    .menu-items {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 1.5rem;
     }
     
     /* Hamburger button - hidden on desktop */
@@ -835,6 +929,7 @@
         position: relative;
         min-width: 44px;
         min-height: 44px;
+        margin-left: auto;
     }
     
     .navbar-toggle:active {
@@ -884,6 +979,48 @@
         opacity: 1;
     }
     
+    /* ✅ DESKTOP: Menu link styling */
+    .menu-link {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        padding: 0.8rem 1.5rem;
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        color: white;
+        text-decoration: none;
+        border-radius: 12px;
+        font-weight: 600;
+        font-size: 0.95rem;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        cursor: pointer;
+        touch-action: manipulation;
+        min-height: 44px;
+        border: none;
+        width: auto;
+        font-family: inherit;
+        white-space: nowrap;
+    }
+    
+    .menu-link:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
+    }
+    
+    .menu-link:active {
+        transform: translateY(0);
+        opacity: 0.8;
+    }
+    
+    .logout-link {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+    }
+    
+    .logout-link:hover {
+        box-shadow: 0 6px 16px rgba(239, 68, 68, 0.4);
+    }
+    
     /* Mobile styles */
     @media (max-width: 768px) {
         /* Show hamburger button */
@@ -900,7 +1037,7 @@
             justify-content: center;
         }
         
-        /* Mobile menu styling */
+        /* ✅ MOBILE: Sidebar menu styling */
         .navbar-user {
             position: fixed;
             top: 0;
@@ -915,29 +1052,46 @@
             z-index: 999;
             box-shadow: -5px 0 25px rgba(0, 0, 0, 0.5);
             overflow-y: auto;
-            display: flex;
             flex-direction: column;
             gap: 1rem;
+            margin-left: 0;
         }
         
         .navbar-user.active {
             right: 0;
         }
         
-        /* Mobile menu items */
-        .navbar-user .btn,
-        .navbar-user .btn-logout {
+        /* ✅ MOBILE: Menu items container */
+        .menu-items {
+            display: flex;
+            flex-direction: column;
             width: 100%;
-            margin: 0;
-            padding: 1rem;
-            justify-content: center;
-            text-align: center;
+            gap: 1rem;
         }
         
-        .navbar-user .btn-secondary {
-            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        /* ✅ MOBILE: Menu links */
+        .menu-link {
+            width: 100%;
+            justify-content: flex-start;
+            padding: 1.2rem 1.5rem;
+            font-size: 1.1rem;
+            background: rgba(30, 41, 59, 0.6);
+            border-left: 3px solid #4cc9f0;
+            box-shadow: none;
+            border-radius: 8px;
         }
         
+        .menu-link:active {
+            background: rgba(30, 41, 59, 0.9);
+            transform: translateX(5px);
+        }
+        
+        .logout-link {
+            background: rgba(239, 68, 68, 0.2);
+            border-left-color: #ef4444;
+        }
+        
+        /* ✅ MOBILE: User info */
         .navbar-user .user-info {
             width: 100%;
             justify-content: center;
@@ -952,6 +1106,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            padding: 0 1rem;
         }
         
         .navbar-brand {
@@ -1082,36 +1237,36 @@
         <button class="navbar-toggle" id="navToggle" type="button">
             <i class="fas fa-bars"></i>
         </button>
+        
+        <!-- Desktop/Mobile Menu -->
+        <div class="navbar-user" id="navMenu">
+            <!-- Close button -->
+            <button class="navbar-close" id="navClose" type="button">
+                <i class="fas fa-times"></i>
+            </button>
+            
+            <!-- Menu Items -->
+            <div class="menu-items">
+                <button class="menu-link" data-href="{{ url_for('main.dashboard') }}" type="button">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Dashboard</span>
+                </button>
+                
+                <div class="user-info">
+                    <i class="fas fa-user-circle"></i>
+                    <span class="user-email">{{ session.get('username', 'User') }}</span>
+                </div>
+                
+                <button class="menu-link logout-link" data-href="{{ url_for('main.logout') }}" type="button">
+                    <i class="fas fa-sign-out-alt"></i>
+                    <span>Logout</span>
+                </button>
+            </div>
+        </div>
     </div>
     
     <!-- Overlay -->
     <div class="navbar-overlay" id="navOverlay"></div>
-    
-    <!-- Mobile Menu -->
-    <div class="navbar-user" id="navMenu">
-        <!-- Close button -->
-        <button class="navbar-close" id="navClose" type="button">
-            <i class="fas fa-times"></i>
-        </button>
-        
-        <!-- Menu Items - Using data-href instead of href -->
-        <div class="menu-items">
-            <button class="menu-link" data-href="{{ url_for('main.dashboard') }}" type="button">
-                <i class="fas fa-chart-line"></i>
-                <span>Dashboard</span>
-            </button>
-            
-            <div class="user-info">
-                <i class="fas fa-user-circle"></i>
-                <span class="user-email">{{ session.get('username', 'User') }}</span>
-            </div>
-            
-            <button class="menu-link logout-link" data-href="{{ url_for('main.logout') }}" type="button">
-                <i class="fas fa-sign-out-alt"></i>
-                <span>Logout</span>
-            </button>
-        </div>
-    </div>
 </nav>
 
 <script>

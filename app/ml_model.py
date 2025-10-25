@@ -18,7 +18,7 @@ except FileNotFoundError:
     model = None
 
 
-def classify_threat(vt_data=None, shodan_data=None, otx_data=None, ioc_type=None, user_input=None, google_data=None):
+def classify_threat(vt_data=None, shodan_data=None, otx_data=None, abuseipdb_data=None, ioc_type=None, user_input=None, google_data=None):
     """
     Classify threat using reports from VirusTotal, Shodan, OTX, and Google APIs.
     

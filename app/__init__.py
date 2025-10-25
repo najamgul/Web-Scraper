@@ -28,6 +28,16 @@ def create_app():
     # Optional Flask configs
     app.config["DEBUG"] = os.getenv("FLASK_DEBUG", "False") == "True"
     
+    # Set CSRF timeout based on an environment variable, defaulting to no expiry
+    csrf_timeout = os.getenv("WTF_CSRF_TIME_LIMIT", "").strip()
+    if not csrf_timeout or csrf_timeout.lower() == "none":
+        app.config["WTF_CSRF_TIME_LIMIT"] = None
+    else:
+        try:
+            app.config["WTF_CSRF_TIME_LIMIT"] = int(csrf_timeout)
+        except ValueError:
+            app.config["WTF_CSRF_TIME_LIMIT"] = 3600
+    
     # Connect to MongoDB Atlas
     try:
         connect(host=app.config["MONGODB_URI"])

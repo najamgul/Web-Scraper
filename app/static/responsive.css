@@ -49,12 +49,12 @@ a, button, .btn, input[type="submit"], input[type="button"],
 }
 
 /* ========================================
-   2. RESPONSIVE NAVBAR (Hamburger Menu)
+   2. RESPONSIVE NAVBAR (Hamburger Menu) - FIXED
    ======================================== */
 
-/* Mobile menu toggle button */
+/* Mobile menu toggle button - HIDDEN ON DESKTOP */
 .navbar-toggle {
-    display: none;
+    display: none; /* ✅ Hidden by default on desktop */
     background: rgba(76, 201, 240, 0.2);
     border: 2px solid rgba(76, 201, 240, 0.4);
     color: #4cc9f0;
@@ -65,6 +65,8 @@ a, button, .btn, input[type="submit"], input[type="button"],
     transition: all 0.3s ease;
     z-index: 1001;
     position: relative;
+    min-width: 44px;
+    min-height: 44px;
 }
 
 .navbar-toggle:hover {
@@ -75,10 +77,65 @@ a, button, .btn, input[type="submit"], input[type="button"],
     transform: scale(0.95);
 }
 
+/* Close button - HIDDEN BY DEFAULT */
+.navbar-close {
+    display: none; /* ✅ Hidden by default */
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    background: rgba(239, 68, 68, 0.2);
+    border: 2px solid rgba(239, 68, 68, 0.4);
+    color: #ef4444;
+    padding: 0.5rem 0.8rem;
+    border-radius: 8px;
+    font-size: 1.3rem;
+    cursor: pointer;
+    z-index: 1002;
+    min-width: 44px;
+    min-height: 44px;
+}
+
+.navbar-close:hover {
+    background: rgba(239, 68, 68, 0.3);
+}
+
+.navbar-close:active {
+    transform: scale(0.95);
+}
+
+/* Mobile overlay - HIDDEN BY DEFAULT */
+.navbar-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 998;
+    display: none; /* ✅ Hidden by default */
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    touch-action: none;
+}
+
+.navbar-overlay.active {
+    display: block;
+    opacity: 1;
+}
+
 @media (max-width: 768px) {
-    /* Show hamburger button */
+    /* ✅ Show hamburger button ONLY on mobile */
     .navbar-toggle {
-        display: block;
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* ✅ Show close button ONLY when menu is active */
+    .navbar-user.active .navbar-close {
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
     }
 
     /* Hide/show navbar links */
@@ -92,7 +149,7 @@ a, button, .btn, input[type="submit"], input[type="button"],
         backdrop-filter: blur(20px);
         padding: 5rem 2rem 2rem 2rem;
         transition: right 0.4s ease;
-        z-index: 1000;
+        z-index: 999;
         box-shadow: -5px 0 25px rgba(0, 0, 0, 0.5);
         overflow-y: auto;
     }
@@ -111,38 +168,6 @@ a, button, .btn, input[type="submit"], input[type="button"],
         border-left: 3px solid #4cc9f0;
         cursor: pointer;
         touch-action: manipulation;
-    }
-
-    /* Mobile overlay */
-    .navbar-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.7);
-        z-index: 999;
-        display: none;
-        touch-action: none;
-    }
-
-    .navbar-overlay.active {
-        display: block;
-    }
-
-    /* Close button */
-    .navbar-close {
-        position: absolute;
-        top: 1rem;
-        right: 1rem;
-        background: rgba(239, 68, 68, 0.2);
-        border: 2px solid rgba(239, 68, 68, 0.4);
-        color: #ef4444;
-        padding: 0.5rem 0.8rem;
-        border-radius: 8px;
-        font-size: 1.3rem;
-        cursor: pointer;
-        z-index: 1001;
     }
 
     /* Dashboard navbar */
@@ -174,6 +199,40 @@ a, button, .btn, input[type="submit"], input[type="button"],
     }
 }
 
+/* ✅ DESKTOP: Ensure navbar elements are visible and properly positioned */
+@media (min-width: 769px) {
+    .navbar-toggle {
+        display: none !important; /* ✅ Force hide on desktop */
+    }
+    
+    .navbar-close {
+        display: none !important; /* ✅ Force hide on desktop */
+    }
+    
+    .navbar-overlay {
+        display: none !important; /* ✅ Force hide on desktop */
+    }
+    
+    .navbar-user {
+        position: static !important;
+        display: flex !important;
+        flex-direction: row !important;
+        width: auto !important;
+        height: auto !important;
+        background: transparent !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+        margin-left: auto !important;
+    }
+    
+    .menu-items {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        gap: 1.5rem !important;
+    }
+}
+
 /* ========================================
    3. RESPONSIVE CONTAINERS & GRIDS
    ======================================== */
@@ -182,6 +241,21 @@ a, button, .btn, input[type="submit"], input[type="button"],
     .container {
         max-width: 100%;
         padding: 1.5rem;
+    }
+}
+
+@media (max-width: 1024px) {
+    .charts-grid,
+    .chart-grid {
+        grid-template-columns: 1fr 1fr !important;
+        gap: 1.8rem !important;
+    }
+    .stats-grid {
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) !important;
+    }
+    .navbar-content {
+        padding: 0 1.5rem !important;
+        gap: 1rem !important;
     }
 }
 
@@ -428,6 +502,45 @@ a, button, .btn, input[type="submit"], input[type="button"],
     }
 }
 
+@media (max-width: 600px) {
+    .scanner-container,
+    .feature-card,
+    .report-card,
+    .chart-card,
+    .landing-box,
+    .form-container {
+        width: 100% !important;
+        padding: 1.6rem !important;
+        margin: 1.2rem 0 !important;
+        box-shadow: none !important;
+        transform: none !important;
+    }
+    .summary-card,
+    .stats-grid,
+    .charts-grid,
+    .chart-grid {
+        grid-template-columns: 1fr !important;
+        gap: 1.2rem !important;
+    }
+    .chart-wrapper,
+    .chart-container {
+        height: 260px !important;
+    }
+    .navbar-content {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 0.8rem !important;
+    }
+    .navbar-user,
+    .menu-items {
+        width: 100% !important;
+    }
+    .flash,
+    .export-links a {
+        font-size: 0.95rem !important;
+    }
+}
+
 /* ========================================
    8. LOADING OVERLAY MOBILE FIX
    ======================================== */
@@ -552,13 +665,164 @@ a, button, .btn, input[type="submit"], input[type="button"],
    ======================================== */
 
 @media (max-width: 768px) {
+    /* Dashboard navbar adjustments */
+    .navbar {
+        padding: 1rem !important;
+    }
+    
+    .navbar-content {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+    }
+    
+    .navbar-brand {
+        font-size: 1rem !important;
+        flex: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+    /* Stats grid mobile */
+    .stats-grid {
+        grid-template-columns: 1fr !important;
+        gap: 1rem !important;
+        margin-bottom: 2rem !important;
+    }
+    
+    .stat-card {
+        padding: 1.5rem !important;
+        text-align: center;
+    }
+    
+    .stat-icon {
+        font-size: 2rem !important;
+        margin-bottom: 0.8rem !important;
+    }
+    
+    .stat-value {
+        font-size: 2rem !important;
+    }
+    
+    .stat-label {
+        font-size: 0.9rem !important;
+    }
+    
+    /* Charts grid mobile */
+    .charts-grid {
+        grid-template-columns: 1fr !important;
+        gap: 1.5rem !important;
+        margin-bottom: 2rem !important;
+    }
+    
+    .chart-card {
+        padding: 1.5rem !important;
+    }
+    
+    .chart-title {
+        font-size: 1.1rem !important;
+        margin-bottom: 1rem !important;
+    }
+    
+    .chart-wrapper {
+        height: 280px !important;
+        margin-bottom: 0;
+    }
+    
+    /* Table and feed section */
+    div[style*="display: grid"][style*="grid-template-columns: 1fr 1fr"] {
+        display: grid !important;
+        grid-template-columns: 1fr !important;
+        gap: 1.5rem !important;
+        margin-top: 1.5rem !important;
+    }
+    
+    /* Threat table mobile */
+    .threat-table {
+        padding: 1.5rem !important;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .threat-table table {
+        min-width: 600px;
+        font-size: 0.85rem;
+    }
+    
+    .threat-table th,
+    .threat-table td {
+        padding: 0.75rem !important;
+        font-size: 0.85rem !important;
+    }
+    
+    .threat-table th {
+        position: sticky;
+        top: 0;
+        background: rgba(15, 23, 42, 0.95);
+        z-index: 1;
+    }
+    
+    /* Live feed mobile */
     .live-feed {
         max-height: 400px !important;
+        padding: 1.5rem !important;
     }
 
     .feed-item {
         font-size: 0.9rem;
         padding: 0.8rem;
+        margin-bottom: 0.8rem;
+    }
+    
+    .feed-item > div {
+        flex-direction: column !important;
+        gap: 0.5rem;
+    }
+    
+    .feed-item strong {
+        word-break: break-all;
+        font-size: 0.85rem;
+    }
+    
+    .feed-time {
+        font-size: 0.8rem !important;
+    }
+    
+    /* Badge adjustments */
+    .badge {
+        padding: 0.3rem 0.7rem !important;
+        font-size: 0.75rem !important;
+        white-space: nowrap;
+    }
+}
+
+/* Extra small mobile devices */
+@media (max-width: 480px) {
+    .navbar-brand {
+        font-size: 0.85rem !important;
+    }
+    
+    .navbar-brand i {
+        display: none; /* Hide icon on very small screens */
+    }
+    
+    .stat-value {
+        font-size: 1.8rem !important;
+    }
+    
+    .chart-wrapper {
+        height: 250px !important;
+    }
+    
+    .chart-title {
+        font-size: 1rem !important;
+    }
+    
+    .threat-table,
+    .live-feed {
+        padding: 1rem !important;
     }
 }
 
@@ -839,5 +1103,147 @@ form * {
 
     .classification {
         border: 2px solid white;
+    }
+}
+
+/* ========================================
+   26. DASHBOARD CHART MOBILE RESPONSIVENESS
+   ======================================== */
+
+@media (max-width: 768px) {
+    /* Ensure charts are responsive on mobile */
+    canvas {
+        max-width: 100%;
+        height: auto !important;
+    }
+    
+    /* Chart containers should allow proper touch scrolling */
+    .chart-card {
+        touch-action: pan-y;
+    }
+    
+    /* Better chart legend positioning on mobile */
+    .chart-card canvas {
+        touch-action: manipulation;
+    }
+}
+
+/* ========================================
+   27. MOBILE SCROLLBAR CUSTOMIZATION
+   ======================================== */
+
+@media (max-width: 768px) {
+    /* Custom scrollbar for tables on mobile */
+    .threat-table::-webkit-scrollbar,
+    .live-feed::-webkit-scrollbar,
+    .table-wrapper::-webkit-scrollbar {
+        height: 8px;
+        width: 8px;
+    }
+    
+    .threat-table::-webkit-scrollbar-track,
+    .live-feed::-webkit-scrollbar-track,
+    .table-wrapper::-webkit-scrollbar-track {
+        background: rgba(15, 23, 42, 0.5);
+        border-radius: 10px;
+    }
+    
+    .threat-table::-webkit-scrollbar-thumb,
+    .live-feed::-webkit-scrollbar-thumb,
+    .table-wrapper::-webkit-scrollbar-thumb {
+        background: #4cc9f0;
+        border-radius: 10px;
+    }
+    
+    .threat-table::-webkit-scrollbar-thumb:hover,
+    .live-feed::-webkit-scrollbar-thumb:hover,
+    .table-wrapper::-webkit-scrollbar-thumb:hover {
+        background: #3ba0c0;
+    }
+}
+
+/* ========================================
+   28. MOBILE TOUCH FEEDBACK
+   ======================================== */
+
+@media (max-width: 768px) {
+    /* Add visual feedback for touch interactions */
+    .stat-card:active,
+    .chart-card:active,
+    .threat-table:active {
+        opacity: 0.95;
+    }
+    
+    /* Improve button touch feedback */
+    .btn:active,
+    button:active {
+        transform: scale(0.98);
+    }
+    
+    /* Badge touch feedback */
+    .badge {
+        user-select: none;
+        pointer-events: none;
+    }
+}
+
+/* ========================================
+   29. MOBILE NAVBAR IMPROVEMENTS FOR DASHBOARD
+   ======================================== */
+
+@media (max-width: 768px) {
+    /* Ensure dashboard navbar is properly aligned */
+    .navbar {
+        position: sticky;
+        top: 0;
+        z-index: 1000;
+    }
+    
+    /* Make navbar links in mobile menu more touch-friendly */
+    .navbar-links.active {
+        overflow-y: auto;
+    }
+    
+    .navbar-links.active::-webkit-scrollbar {
+        width: 6px;
+    }
+    
+    .navbar-links.active::-webkit-scrollbar-track {
+        background: rgba(15, 23, 42, 0.5);
+    }
+    
+    .navbar-links.active::-webkit-scrollbar-thumb {
+        background: #4cc9f0;
+        border-radius: 3px;
+    }
+}
+
+/* ========================================
+   30. MOBILE PERFORMANCE OPTIMIZATIONS
+   ======================================== */
+
+@media (max-width: 768px) {
+    /* Use GPU acceleration for smoother animations */
+    .navbar-links,
+    .navbar-overlay,
+    .stat-card,
+    .chart-card {
+        will-change: transform;
+        transform: translateZ(0);
+        backface-visibility: hidden;
+    }
+    
+    /* Prevent text selection during scrolling */
+    .stats-grid,
+    .charts-grid {
+        -webkit-user-select: none;
+        user-select: none;
+    }
+    
+    /* Allow text selection in content areas */
+    .threat-table,
+    .live-feed {
+        -webkit-user-select: text;
+        user-select: text;
     }
 }

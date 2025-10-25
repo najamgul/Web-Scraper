@@ -7,6 +7,7 @@ import csv
 import io
 import logging
 import hashlib
+import math
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 from datetime import datetime, timedelta
 import time  # Should already be there
@@ -34,7 +35,27 @@ from app.analytics import (
 from app.scraper import google_cse_search
 from app.vt_shodan_api import vt_lookup_domain, vt_lookup_ip, vt_lookup_url, shodan_lookup
 from app.otx_api import otx_lookup
-from app.ml_model import classify_threat
+
+# ✅ Import Unified Orchestrator
+from app.orchestrator import (
+    orchestrate_threat_intelligence,
+    detect_input_type as orchestrator_detect_type,
+    format_results_for_template as orchestrator_format_results
+)
+
+# ✅ INITIALIZE LOGGER
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Use improved ML model
+try:
+    from app.ml_model_improved import classify_threat, classify_threat_with_details
+    logger.info("✅ Using improved ML model with TF-IDF and SMOTE")
+except ImportError:
+    from app.ml_model import classify_threat
+    classify_threat_with_details = None
+    logger.warning("⚠️ Falling back to legacy ML model")
+
 from app.forms import InputForm, LoginForm, SignupForm
 from app.models import User, IOCResult, Feedback
 from app.decorators import login_required
@@ -48,9 +69,11 @@ from reportlab.lib import colors
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill
 
-# ✅ INITIALIZE LOGGER
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+try:
+    import numpy as np
+    NUMPY_INT_TYPES = (np.integer,)
+except ImportError:  # numpy is optional at runtime
+    NUMPY_INT_TYPES = tuple()
 
 # ✅ CACHE SETUP
 CACHE = {}
@@ -71,6 +94,37 @@ def set_cached_result(ioc_value, data):
     cache_key = hashlib.md5(ioc_value.encode()).hexdigest()
     CACHE[cache_key] = (data, datetime.utcnow())
     logger.info(f"💾 Cached result for {ioc_value}")
+
+
+MAX_MONGO_INT = (1 << 63) - 1
+
+
+def _sanitize_scalar(value):
+    """Normalize scalars so MongoDB can store them safely."""
+    if isinstance(value, bool):  # bool is a subclass of int, keep as-is
+        return value
+
+    if isinstance(value, NUMPY_INT_TYPES):
+        value = int(value)
+
+    if isinstance(value, int):
+        return str(value) if abs(value) > MAX_MONGO_INT else value
+
+    if isinstance(value, float):
+        if math.isnan(value) or math.isinf(value):
+            return str(value)
+        return value
+
+    return value
+
+
+def sanitize_for_mongo(data):
+    """Recursively convert values that MongoDB cannot store (e.g. >8-byte ints)."""
+    if isinstance(data, dict):
+        return {key: sanitize_for_mongo(value) for key, value in data.items()}
+    if isinstance(data, list):
+        return [sanitize_for_mongo(item) for item in data]
+    return _sanitize_scalar(data)
 
 
 # ✅ PARALLEL API FETCHER
@@ -395,9 +449,18 @@ def index():
 
         ioc_type = detect_ioc_type(user_input)
         
+        # ✅ LOG SCAN REQUEST
+        logger.info(f"\n{'='*80}")
+        logger.info(f"📡 SCAN REQUEST (via /index)")
+        logger.info(f"   User: {session.get('username', 'Anonymous')}")
+        logger.info(f"   Input: {user_input}")
+        logger.info(f"   Type: {ioc_type}")
+        logger.info(f"{'='*80}\n")
+        
         # ✅ CHECK CACHE FIRST
         cached = get_cached_result(user_input)
         if cached:
+            logger.info("💾 Returning cached results")
             flash("Results loaded from cache (scanned recently)", "info")
             return render_template("results.html", results=cached['results'], chart_data=cached['chart_data'])
         
@@ -407,51 +470,73 @@ def index():
         
         
         # ✅ OPTIMIZED: Skip OTX on initial load, fetch via AJAX
-        logger.info(f"🚀 Starting FAST API fetch (VT + Shodan only)")
+        logger.info(f"🚀 Starting FAST API fetch (VT + Shodan + AbuseIPDB)")
         start_time = datetime.utcnow()
 
-# Fetch only VT, Shodan, and Google (skip OTX)
-        with ThreadPoolExecutor(max_workers=3) as executor:
+# Fetch only VT, Shodan, AbuseIPDB and Google (skip OTX)
+        with ThreadPoolExecutor(max_workers=4) as executor:
             futures = {}
 
             # VirusTotal
             if ioc_type == "ip":
+                logger.info("   📌 Submitting VT IP lookup...")
                 futures['vt'] = executor.submit(vt_lookup_ip, user_input)
             elif ioc_type == "url":
+                logger.info("   📌 Submitting VT URL lookup...")
                 futures['vt'] = executor.submit(vt_lookup_url, user_input)
             elif ioc_type in ["domain", "hash"]:
+                logger.info("   📌 Submitting VT domain/hash lookup...")
                 futures['vt'] = executor.submit(vt_lookup_domain, user_input)
 
             # Shodan (only for IPs)
             if ioc_type == "ip":
+                logger.info("   📌 Submitting Shodan lookup...")
                 futures['shodan'] = executor.submit(shodan_lookup, user_input)
+                
+            # AbuseIPDB (only for IPs)
+            if ioc_type == "ip":
+                logger.info("   📌 Submitting AbuseIPDB lookup...")
+                from app.abuseipdb_api import abuseipdb_lookup
+                futures['abuseipdb'] = executor.submit(abuseipdb_lookup, user_input)
 
             # Google (only for keywords)
             if ioc_type == "keyword":
+                logger.info("   📌 Submitting Google CSE search...")
                 futures['google'] = executor.submit(google_cse_search, user_input)
 
             # Collect results with timeout
             vt_data = {}
             shodan_data = {}
+            abuseipdb_data = {}
             scraped_data = []
 
             for key, future in futures.items():
                 try:
                     if key == 'vt':
                         vt_data = future.result(timeout=15) or {}
+                        logger.info(f"   ✅ VT result: {len(str(vt_data))} chars")
                     elif key == 'shodan':
                         shodan_data = future.result(timeout=15) or {}
+                        logger.info(f"   ✅ Shodan result: {len(str(shodan_data))} chars")
+                    elif key == 'abuseipdb':
+                        abuseipdb_data = future.result(timeout=15) or {}
+                        logger.info(f"   ✅ AbuseIPDB result: {len(str(abuseipdb_data))} chars")
                     elif key == 'google':
                         scraped_data = future.result(timeout=20) or []
+                        logger.info(f"   ✅ Google CSE: {len(scraped_data)} results")
                 except Exception as e:
-                    logger.error(f"Error fetching {key}: {e}")
+                    logger.error(f"   ❌ Error fetching {key}: {e}")
 
 # ✅ OTX will be loaded via AJAX
         otx_data = {'loading': True}  # Placeholder
 
         elapsed = (datetime.utcnow() - start_time).total_seconds()
         logger.info(f"⏱️ Fast API fetch completed in {elapsed:.2f} seconds (OTX will load via AJAX)")
-
+        logger.info(f"\n📊 API Results Summary:")
+        logger.info(f"   VT: {'✅ OK' if vt_data and 'error' not in vt_data else '❌ Failed'}")
+        logger.info(f"   Shodan: {'✅ OK' if shodan_data and 'error' not in shodan_data else '❌ Failed'}")
+        logger.info(f"   AbuseIPDB: {'✅ OK' if abuseipdb_data and 'error' not in abuseipdb_data else '❌ Failed'}")
+        logger.info(f"   Google CSE: {'✅ OK' if scraped_data else '❌ Failed'}\n")
         
     
         
@@ -465,26 +550,34 @@ def index():
         enrichment = None  # ← Don't even set a placeholder
         
         # Save to MongoDB
+        logger.info("💾 Saving results to MongoDB...")
         user_ref = None
         if session.get("user_id"):
             try:
                 user_ref = User.objects.get(id=session.get("user_id"))
-            except:
+            except Exception:
                 pass
+
+        vt_for_db = sanitize_for_mongo(vt_data)
+        shodan_for_db = sanitize_for_mongo(shodan_data)
+        abuseipdb_for_db = sanitize_for_mongo(abuseipdb_data)
+        scraped_for_db = sanitize_for_mongo(scraped_data)
 
         ioc_result = IOCResult(
             input_value=user_input,
             type=ioc_type,
-            vt_report=vt_data,
-            shodan_report=shodan_data,
+            vt_report=vt_for_db,
+            shodan_report=shodan_for_db,
+            abuseipdb_report=abuseipdb_for_db,
             otx_report={'loading': True},
-            scraped_data=scraped_data,
+            scraped_data=scraped_for_db,
             classification=None,  # ← Will be populated by AJAX
             enrichment_context=None,  # ← Will be populated by AJAX
             user_id=user_ref,
             timestamp=datetime.utcnow()
         )
         ioc_result.save()
+        logger.info(f"✅ Saved to MongoDB with ID: {ioc_result.id}")
 
         # Chart Data
         chart_data = {
@@ -503,6 +596,7 @@ def index():
             "type": ioc_type,
             "vt": vt_data,
             "shodan": shodan_data,
+            "abuseipdb": abuseipdb_data,
             "otx": otx_data,  # Will be {'loading': True}
             "otx_formatted": None,  # Will be loaded via AJAX
             "scraped": scraped_data,
@@ -522,6 +616,163 @@ def index():
 
         return render_template("results.html", results=results, chart_data=json.dumps(chart_data))
     
+    return render_template("index.html", form=form)
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 🚀 UNIFIED THREAT INTELLIGENCE ENDPOINT
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@main_bp.route("/scan", methods=["GET", "POST"])
+@login_required
+def scan_unified():
+    """
+    🎯 UNIFIED THREAT INTELLIGENCE ORCHESTRATOR
+    
+    This endpoint orchestrates ALL threat intelligence modules:
+    - Automatic input detection (IP, URL, domain, hash, keyword)
+    - Parallel API fetching (VirusTotal, Shodan, OTX, Google CSE)
+    - ML classification (Random Forest with TF-IDF)
+    - LLM analysis (Gemini/Ollama)
+    - Unified results display
+    
+    Flow:
+    1. Detect input type automatically
+    2. Run all APIs in parallel
+    3. Classify with ML model
+    4. Generate LLM explanation
+    5. Save to database
+    6. Display unified results
+    """
+    form = InputForm()
+    
+    if form.validate_on_submit():
+        user_input = form.input_data.data.strip()
+        
+        if not user_input:
+            flash("Please enter a keyword, IP, URL, domain, or hash.", "warning")
+            return redirect(url_for("main.scan_unified"))
+        
+        logger.info(f"\n{'='*80}")
+        logger.info(f"🎯 UNIFIED SCAN REQUEST")
+        logger.info(f"   User: {session.get('username', 'Anonymous')}")
+        logger.info(f"   Input: {user_input}")
+        logger.info(f"{'='*80}\n")
+        
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # STEP 1: Check Cache
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        cached = get_cached_result(user_input)
+        if cached:
+            logger.info("💾 Returning cached results")
+            flash("Results loaded from cache (scanned recently)", "info")
+            return render_template(
+                "results.html",
+            # Fetch only VT, Shodan, AbuseIPDB and Google (skip OTX)        
+                chart_data=cached.get('chart_data', '{}')
+            )
+        
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # STEP 2: Run Unified Orchestration Pipeline
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        try:
+            orchestrated_data = orchestrate_threat_intelligence(user_input)
+        except Exception as e:
+            logger.error(f"❌ Orchestration failed: {e}", exc_info=True)
+            flash(f"Error analyzing threat: {str(e)}", "danger")
+            return redirect(url_for("main.scan_unified"))
+        
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # STEP 3: Save to Database
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        user_ref = None
+        if session.get("user_id"):
+            try:
+                user_ref = User.objects.get(id=session.get("user_id"))
+            except Exception as e:
+                logger.warning(f"User lookup failed: {e}")
+        
+        ioc_result = IOCResult(
+            input_value=orchestrated_data['input_value'],
+            type=orchestrated_data['input_type'],
+            vt_report=sanitize_for_mongo(orchestrated_data.get('vt_data', {})),
+            shodan_report=sanitize_for_mongo(orchestrated_data.get('shodan_data', {})),
+            abuseipdb_report=sanitize_for_mongo(orchestrated_data.get('abuseipdb_data', {})),
+            otx_report=sanitize_for_mongo(orchestrated_data.get('otx_data', {})),
+            scraped_data=sanitize_for_mongo(orchestrated_data.get('google_data', [])),
+            classification=orchestrated_data.get('classification', 'Unknown'),
+            enrichment_context=sanitize_for_mongo(orchestrated_data.get('llm_analysis', {})),
+            user_id=user_ref,
+            timestamp=datetime.utcnow()
+        )
+        ioc_result.save()
+        logger.info(f"💾 Saved to MongoDB with ID: {ioc_result.id}")
+        
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # STEP 4: Format Results for Template
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        template_data = orchestrator_format_results(orchestrated_data)
+        template_data['ioc_id'] = str(ioc_result.id)
+        template_data['input'] = orchestrated_data['input_value']
+        template_data['type'] = orchestrated_data['input_type']
+        
+        # Format OTX data for template compatibility
+        if orchestrated_data.get('otx_data'):
+            template_data['otx_formatted'] = format_otx_for_display(
+                orchestrated_data['otx_data']
+            )
+        
+        # Format Google data for template compatibility
+        if orchestrated_data.get('google_data'):
+            template_data['google_formatted'] = format_google_for_display(
+                orchestrated_data['google_data']
+            )
+            template_data['scraped'] = orchestrated_data['google_data']
+        
+        # Chart data for dashboard
+        chart_data = {
+            "labels": ["Malicious", "Benign", "Informational", "Suspicious", "Unknown"],
+            "values": [
+                IOCResult.objects(classification="Malicious").count(),
+                IOCResult.objects(classification="Benign").count(),
+                IOCResult.objects(classification="Informational").count(),
+                IOCResult.objects(classification="Suspicious").count(),
+                IOCResult.objects(classification="Unknown").count(),
+            ]
+        }
+        
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # STEP 5: Cache Results
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        set_cached_result(user_input, {
+            'results': template_data,
+            'chart_data': json.dumps(chart_data)
+        })
+        
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # STEP 6: Render Results
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        logger.info(f"\n{'='*80}")
+        logger.info(f"✅ UNIFIED ANALYSIS COMPLETE")
+        logger.info(f"   Input Type: {orchestrated_data.get('input_type')}")
+        logger.info(f"   Classification: {template_data.get('classification')}")
+        logger.info(f"   Total Time: {orchestrated_data.get('timing', {}).get('pipeline_total', 'N/A')}")
+        logger.info(f"   Errors: {len(orchestrated_data.get('errors', []))}")
+        if orchestrated_data.get('classification_details'):
+            logger.info(f"   ML Confidence: {orchestrated_data['classification_details'].get('model_confidence', 'N/A')}")
+        logger.info(f"{'='*80}\n")
+        
+        if orchestrated_data.get('errors'):
+            flash(f"Note: {len(orchestrated_data['errors'])} API(s) had issues. Check logs for details.", "warning")
+        
+        flash(f"Analysis complete! Processed in {orchestrated_data.get('timing', {}).get('pipeline_total', 'N/A')}", "success")
+        
+        return render_template(
+            "results.html",
+            results=template_data,
+            chart_data=json.dumps(chart_data)
+        )
+    
+    # GET request - show form
     return render_template("index.html", form=form)
 
 
@@ -579,15 +830,17 @@ def get_otx_data(ioc_id):
                 }
         
         # Save to database
-        ioc_result.otx_report = otx_data
+        ioc_result.otx_report = sanitize_for_mongo(otx_data)
         ioc_result.save()
         
         logger.info(f"✅ OTX data fetched for {ioc_id}")
         
+        sanitized_otx = sanitize_for_mongo(otx_data)
+
         return jsonify({
             'status': 'complete',
-            'otx_data': otx_data,
-            'otx_formatted': format_otx_for_display(otx_data)
+            'otx_data': sanitized_otx,
+            'otx_formatted': format_otx_for_display(sanitized_otx)
         })
     
     except Exception as e:
@@ -623,21 +876,76 @@ def get_classification(ioc_id):
         vt_data = ioc_result.vt_report or {}
         shodan_data = ioc_result.shodan_report or {}
         otx_data = ioc_result.otx_report or {}
+        abuseipdb_data = ioc_result.abuseipdb_report or {}
         
         # For keywords, prepare Google data
         google_formatted = None
         if ioc_result.type == "keyword" and ioc_result.scraped_data:
             google_formatted = format_google_for_display(ioc_result.scraped_data)
         
-        # Run classification
-        classification = classify_threat(
-            vt_data=vt_data,
-            shodan_data=shodan_data,
-            otx_data=otx_data,
-            ioc_type=ioc_result.type,
-            user_input=ioc_result.input_value,
-            google_data=google_formatted
-        )
+        # Run classification with detailed logging
+        if classify_threat_with_details:
+            classification, details = classify_threat_with_details(
+                vt_data=vt_data,
+                shodan_data=shodan_data,
+                otx_data=otx_data,
+                abuseipdb_data=abuseipdb_data,
+                ioc_type=ioc_result.type,
+                user_input=ioc_result.input_value,
+                google_data=google_formatted
+            )
+            
+            # Log comprehensive details
+            logger.info(f"\n{'='*80}")
+            logger.info(f"📊 DETAILED CLASSIFICATION RESULTS")
+            logger.info(f"{'='*80}")
+            logger.info(f"Input: {ioc_result.input_value} ({ioc_result.type})")
+            logger.info(f"Final Classification: {classification}")
+            logger.info(f"\n🤖 Model Metrics:")
+            logger.info(f"   Confidence: {details.get('model_confidence', 0):.2%}")
+            logger.info(f"   Threshold Met (0.75): {details.get('confidence_threshold_met', False)}")
+            
+            if 'api_scores' in details:
+                api_scores = details['api_scores']
+                logger.info(f"\n📡 API Scores:")
+                logger.info(f"   VirusTotal: {api_scores.get('vt_score', 0):.1f}/100")
+                logger.info(f"   OTX: {api_scores.get('otx_score', 0):.1f}/100")
+                logger.info(f"   Shodan: {api_scores.get('shodan_score', 0):.1f}/100")
+                logger.info(f"   AbuseIPDB: {api_scores.get('abuseipdb_score', 0):.1f}/100")
+                logger.info(f"   Weighted Total: {api_scores.get('weighted_total', 0):.1f}/100")
+                logger.info(f"   Weights: VT={api_scores.get('weights_used', {}).get('vt', 0):.0%}, "
+                          f"OTX={api_scores.get('weights_used', {}).get('otx', 0):.0%}, "
+                          f"Shodan={api_scores.get('weights_used', {}).get('shodan', 0):.0%}, "
+                          f"AbuseIPDB={api_scores.get('weights_used', {}).get('abuseipdb', 0):.0%}")
+            
+            if 'context_analysis' in details:
+                context = details['context_analysis']
+                logger.info(f"\n🧠 Context Analysis:")
+                logger.info(f"   Benign patterns found: {context.get('benign_score', 0)}")
+                logger.info(f"   Malicious patterns found: {context.get('malicious_score', 0)}")
+                logger.info(f"   Is benign context: {context.get('is_benign_context', False)}")
+                logger.info(f"   Is malicious context: {context.get('is_malicious_context', False)}")
+            
+            logger.info(f"\n📋 Reasoning:")
+            for reason in details.get('reasoning', []):
+                logger.info(f"   - {reason}")
+            logger.info(f"{'='*80}\n")
+            
+            # Store detailed results in enrichment context
+            if not ioc_result.enrichment_context:
+                ioc_result.enrichment_context = {}
+            ioc_result.enrichment_context['classification_details'] = details
+        else:
+            # Fallback to simple classification
+            classification = classify_threat(
+                vt_data=vt_data,
+                shodan_data=shodan_data,
+                otx_data=otx_data,
+                abuseipdb_data=abuseipdb_data,
+                ioc_type=ioc_result.type,
+                user_input=ioc_result.input_value,
+                google_data=google_formatted
+            )
         
         # Save to database
         logger.info(f"💾 Saving classification to database...")
@@ -645,7 +953,7 @@ def get_classification(ioc_id):
         ioc_result.save()
         logger.info(f"✅ Classification SAVED to database: {classification}")
 
-# ✅ Verify it was saved
+    # ✅ Verify it was saved
         ioc_result.reload()
         logger.info(f"✅ Verified in DB: {ioc_result.classification}")
         
@@ -701,11 +1009,21 @@ def get_enrichment(ioc_id):
             invalid_strings = ['Pending', 'Loading...', 'Loading']
             has_invalid = any(inv in summary or inv in why_malicious for inv in invalid_strings)
             
+            # Also check if enrichment is essentially empty
+            is_empty = not summary and not why_malicious and not enrichment.get('recommendation')
+            
             if has_invalid:
                 logger.warning(f"⚠️ Enrichment contains invalid text (Pending/Loading), regenerating...")
                 enrichment = {}  # Force regeneration
+            elif is_empty:
+                logger.warning(f"⚠️ Enrichment is empty, regenerating...")
+                enrichment = {}  # Force regeneration
             else:
                 logger.info(f"✅ Returning cached enrichment for {ioc_id}")
+                logger.info(f"📦 Enrichment data keys: {list(enrichment.keys())}")
+                logger.info(f"   Summary: {enrichment.get('summary', 'N/A')[:100]}...")
+                logger.info(f"   Why Malicious: {enrichment.get('why_malicious', 'N/A')[:100]}...")
+                logger.info(f"   Recommendation: {enrichment.get('recommendation', 'N/A')[:100]}...")
                 return jsonify({
                     'status': 'complete',
                     'enrichment': enrichment
@@ -841,6 +1159,12 @@ def export(format, ioc_id):
                 'confidence': 'Low'
             }
     
+    vt_data = result.vt_report or {}
+    shodan_data = result.shodan_report or {}
+    otx_data = result.otx_report or {}
+    abuseipdb_data = result.abuseipdb_report or {}
+    google_formatted = format_google_for_display(result.scraped_data) if result.scraped_data else None
+
     # JSON Export
     if format == "json":
         return jsonify({
@@ -865,9 +1189,14 @@ def export(format, ioc_id):
                 "sources_analyzed": enrichment.get('sources_analyzed', [])
             },
             "threat_intelligence": {
-                "virustotal": result.vt_report,
-                "shodan": result.shodan_report,
-                "alienvault_otx": result.otx_report
+                "virustotal": vt_data,
+                "shodan": shodan_data,
+                "alienvault_otx": otx_data,
+                "abuseipdb": abuseipdb_data,
+                "google_search": {
+                    "summary": google_formatted,
+                    "raw_results": result.scraped_data
+                }
             },
             "scraped_data": result.scraped_data
         })
@@ -935,10 +1264,10 @@ def export(format, ioc_id):
         writer.writerow(["━" * 80])
         writer.writerow(["VIRUSTOTAL ANALYSIS"])
         writer.writerow(["━" * 80])
-        if result.vt_report and 'error' not in result.vt_report:
-            stats = result.vt_report.get("last_analysis_stats", {})
+        if vt_data and 'error' not in vt_data:
+            stats = vt_data.get("last_analysis_stats", {})
             if not stats:
-                stats = result.vt_report.get("data", {}).get("attributes", {}).get("last_analysis_stats", {})
+                stats = vt_data.get("data", {}).get("attributes", {}).get("last_analysis_stats", {})
             
             if stats:
                 writer.writerow(["Malicious Detections", stats.get("malicious", 0)])
@@ -955,50 +1284,99 @@ def export(format, ioc_id):
         writer.writerow(["━" * 80])
         writer.writerow(["SHODAN NETWORK INTELLIGENCE"])
         writer.writerow(["━" * 80])
-        if result.shodan_report and 'error' not in result.shodan_report:
-            writer.writerow(["IP Address", result.shodan_report.get("ip_str", result.shodan_report.get("ip", "N/A"))])
-            writer.writerow(["Organization", result.shodan_report.get("org", "N/A")])
-            writer.writerow(["ISP", result.shodan_report.get("isp", "N/A")])
-            writer.writerow(["Country", result.shodan_report.get("country_name", "N/A")])
+        if shodan_data and 'error' not in shodan_data:
+            writer.writerow(["IP Address", shodan_data.get("ip_str", shodan_data.get("ip", "N/A"))])
+            writer.writerow(["Organization", shodan_data.get("org", "N/A")])
+            writer.writerow(["ISP", shodan_data.get("isp", "N/A")])
+            writer.writerow(["Country", shodan_data.get("country_name", "N/A")])
             
-            ports = result.shodan_report.get("ports", [])
-            if not ports and "data" in result.shodan_report:
-                ports = [item.get("port") for item in result.shodan_report["data"] if "port" in item]
+            ports = shodan_data.get("ports", [])
+            if not ports and "data" in shodan_data:
+                ports = [item.get("port") for item in shodan_data["data"] if "port" in item]
             
             writer.writerow(["Open Ports", ", ".join(map(str, ports)) if ports else "None detected"])
         else:
             writer.writerow(["No Shodan data available"])
         writer.writerow([])
+
+        # AbuseIPDB Report
+        writer.writerow(["━" * 80])
+        writer.writerow(["ABUSEIPDB REPUTATION"])
+        writer.writerow(["━" * 80])
+        if abuseipdb_data and 'error' not in abuseipdb_data:
+            writer.writerow(["Threat Score", f"{abuseipdb_data.get('threat_score', 0)}/100"])
+            writer.writerow(["Abuse Confidence", f"{abuseipdb_data.get('abuse_confidence_score', 0)}%"])
+            writer.writerow(["Classification", abuseipdb_data.get('classification', 'Unknown')])
+            writer.writerow(["Total Reports", abuseipdb_data.get('total_reports', 0)])
+            writer.writerow(["Last Reported", abuseipdb_data.get('last_reported', 'N/A')])
+            writer.writerow(["Country", abuseipdb_data.get('country_code', 'Unknown')])
+            writer.writerow(["Usage Type", abuseipdb_data.get('usage_type', 'Unknown')])
+            writer.writerow(["ISP", abuseipdb_data.get('isp', 'Unknown')])
+            categories = abuseipdb_data.get('categories') or abuseipdb_data.get('details', {}).get('categories', {})
+            categories = categories if isinstance(categories, dict) else {}
+            if categories:
+                writer.writerow([])
+                writer.writerow(["Category Breakdown"])
+                for name, count in categories.items():
+                    writer.writerow([f"  • {name}", f"{count} reports"])
+        else:
+            writer.writerow(["No AbuseIPDB data available or lookup not applicable"])
+        writer.writerow([])
+
+        # Google OSINT
         writer.writerow(["━" * 80])
         writer.writerow(["GOOGLE SEARCH INTELLIGENCE"])
         writer.writerow(["━" * 80])
-        
-        google_fmt = format_google_for_display(result.scraped_data)
-        if google_fmt:
-            writer.writerow(["Search Results Found", google_fmt.get('result_count', 0)])
-            writer.writerow(["Threat Score", f"{google_fmt.get('threat_score', 0)}/100"])
-            writer.writerow(["Risk Classification", google_fmt.get('classification', 'N/A')])
-            writer.writerow(["Unique Domains", google_fmt.get('total_domains', 0)])
-            threat_indicators = google_fmt.get('threat_indicators', [])
+        if google_formatted:
+            writer.writerow(["Search Results Found", google_formatted.get('result_count', 0)])
+            writer.writerow(["Threat Score", f"{google_formatted.get('threat_score', 0)}/100"])
+            writer.writerow(["Risk Classification", google_formatted.get('classification', 'N/A')])
+            writer.writerow(["Unique Domains", google_formatted.get('total_domains', 0)])
+
+            threat_indicators = google_formatted.get('threat_indicators', [])
             if threat_indicators:
-                writer.writerow(["Threat Indicators", ", ".join(threat_indicators)])
-                domains = google_fmt.get('unique_domains', [])
-            if domains:
-                writer.writerow(["Domains Found", ", ".join(domains[:10])])
-            else:
-                writer.writerow(["No Google search data available"])
                 writer.writerow([])
+                writer.writerow(["Threat Indicators"])
+                for indicator in threat_indicators:
+                    writer.writerow([f"  • {indicator}"])
+
+            safe_indicators = google_formatted.get('safe_indicators', [])
+            if safe_indicators:
+                writer.writerow([])
+                writer.writerow(["Safe Indicators"])
+                for indicator in safe_indicators:
+                    writer.writerow([f"  • {indicator}"])
+
+            domains = google_formatted.get('unique_domains', [])
+            if domains:
+                writer.writerow([])
+                writer.writerow(["Notable Domains"])
+                for domain in domains[:10]:
+                    writer.writerow([f"  • {domain}"])
+
+            top_results = google_formatted.get('top_results', [])
+            if top_results:
+                writer.writerow([])
+                writer.writerow(["Top Search Results"])
+                for entry in top_results:
+                    writer.writerow([entry.get('title', 'No title')])
+                    writer.writerow([entry.get('url', '#')])
+                    writer.writerow([entry.get('snippet', 'No description')])
+                    writer.writerow([])
+        else:
+            writer.writerow(["No Google search data available"])
+        writer.writerow([])
         
         # OTX Report
         writer.writerow(["━" * 80])
         writer.writerow(["ALIENVAULT OTX THREAT INTELLIGENCE"])
         writer.writerow(["━" * 80])
-        if result.otx_report and 'error' not in result.otx_report:
-            writer.writerow(["Threat Score", f"{result.otx_report.get('threat_score', 0)}/100"])
-            writer.writerow(["Classification", result.otx_report.get('classification', 'Unknown')])
-            writer.writerow(["Threat Pulses", result.otx_report.get('source_count', 0)])
+        if otx_data and 'error' not in otx_data:
+            writer.writerow(["Threat Score", f"{otx_data.get('threat_score', 0)}/100"])
+            writer.writerow(["Classification", otx_data.get('classification', 'Unknown')])
+            writer.writerow(["Threat Pulses", otx_data.get('source_count', 0)])
             
-            details = result.otx_report.get('details', {})
+            details = otx_data.get('details', {})
             if details:
                 writer.writerow(["Risk Level", details.get('risk_level', 'Unknown')])
                 
@@ -1067,6 +1445,14 @@ def export(format, ioc_id):
             ["Risk Score", f"{enrichment.get('risk_score', 0)}/100"],
             ["Scan Date", result.timestamp.strftime("%Y-%m-%d %H:%M:%S") if result.timestamp else "N/A"]
         ]
+
+        if abuseipdb_data and 'error' not in abuseipdb_data:
+            ioc_data.append(["AbuseIPDB Confidence", f"{abuseipdb_data.get('abuse_confidence_score', 0)}%"])
+            ioc_data.append(["AbuseIPDB Reports", abuseipdb_data.get('total_reports', 0)])
+
+        if google_formatted:
+            ioc_data.append(["Google Threat Score", f"{google_formatted.get('threat_score', 0)}/100"])
+            ioc_data.append(["Google Classification", google_formatted.get('classification', 'Unknown')])
         
         for item in ioc_data:
             ws_summary[f'A{row}'] = item[0]
@@ -1167,10 +1553,10 @@ def export(format, ioc_id):
         ws_vt[f'A{row}'].font = title_font
         row += 2
         
-        if result.vt_report and 'error' not in result.vt_report:
-            stats = result.vt_report.get("last_analysis_stats", {})
+        if vt_data and 'error' not in vt_data:
+            stats = vt_data.get("last_analysis_stats", {})
             if not stats:
-                stats = result.vt_report.get("data", {}).get("attributes", {}).get("last_analysis_stats", {})
+                stats = vt_data.get("data", {}).get("attributes", {}).get("last_analysis_stats", {})
             
             if stats:
                 ws_vt[f'A{row}'] = "Detection Category"
@@ -1201,29 +1587,29 @@ def export(format, ioc_id):
         ws_shodan[f'A{row}'].font = title_font
         row += 2
         
-        if result.shodan_report and 'error' not in result.shodan_report:
-            shodan_data = [
-                ["IP Address", result.shodan_report.get("ip_str", result.shodan_report.get("ip", "N/A"))],
-                ["Organization", result.shodan_report.get("org", "N/A")],
-                ["ISP", result.shodan_report.get("isp", "N/A")],
-                ["Country", result.shodan_report.get("country_name", "N/A")],
-                ["City", result.shodan_report.get("city", "N/A")]
+        if shodan_data and 'error' not in shodan_data:
+            shodan_rows = [
+                ["IP Address", shodan_data.get("ip_str", shodan_data.get("ip", "N/A"))],
+                ["Organization", shodan_data.get("org", "N/A")],
+                ["ISP", shodan_data.get("isp", "N/A")],
+                ["Country", shodan_data.get("country_name", "N/A")],
+                ["City", shodan_data.get("city", "N/A")]
             ]
             
-            for item in shodan_data:
+            for item in shodan_rows:
                 ws_shodan[f'A{row}'] = item[0]
                 ws_shodan[f'A{row}'].font = Font(bold=True)
                 ws_shodan[f'B{row}'] = item[1]
                 row += 1
             
             row += 1
-            ports = result.shodan_report.get("ports", [])
-            if not ports and "data" in result.shodan_report:
-                ports = [item.get("port") for item in result.shodan_report["data"] if "port" in item]
+            shodan_ports = shodan_data.get("ports", [])
+            if not shodan_ports and "data" in shodan_data:
+                shodan_ports = [item.get("port") for item in shodan_data["data"] if "port" in item]
             
             ws_shodan[f'A{row}'] = "Open Ports"
             ws_shodan[f'A{row}'].font = Font(bold=True)
-            ws_shodan[f'B{row}'] = ", ".join(map(str, ports)) if ports else "None"
+            ws_shodan[f'B{row}'] = ", ".join(map(str, shodan_ports)) if shodan_ports else "None"
         else:
             ws_shodan[f'A{row}'] = "No Shodan data available"
         
@@ -1240,18 +1626,18 @@ def export(format, ioc_id):
         ws_otx[f'A{row}'].font = title_font
         row += 2
         
-        if result.otx_report and 'error' not in result.otx_report:
-            otx_data = [
-                ["Threat Score", f"{result.otx_report.get('threat_score', 0)}/100"],
-                ["Classification", result.otx_report.get('classification', 'Unknown')],
-                ["Threat Pulses", result.otx_report.get('source_count', 0)]
+        if otx_data and 'error' not in otx_data:
+            otx_rows = [
+                ["Threat Score", f"{otx_data.get('threat_score', 0)}/100"],
+                ["Classification", otx_data.get('classification', 'Unknown')],
+                ["Threat Pulses", otx_data.get('source_count', 0)]
             ]
             
-            details = result.otx_report.get('details', {})
+            details = otx_data.get('details', {})
             if details:
-                otx_data.append(["Risk Level", details.get('risk_level', 'Unknown')])
+                otx_rows.append(["Risk Level", details.get('risk_level', 'Unknown')])
             
-            for item in otx_data:
+            for item in otx_rows:
                 ws_otx[f'A{row}'] = item[0]
                 ws_otx[f'A{row}'].font = Font(bold=True)
                 ws_otx[f'B{row}'] = item[1]
@@ -1279,6 +1665,133 @@ def export(format, ioc_id):
         
         ws_otx.column_dimensions['A'].width = 30
         ws_otx.column_dimensions['B'].width = 60
+
+        # ============================================
+        # WORKSHEET 6: ABUSEIPDB
+        # ============================================
+        ws_abuse = wb.create_sheet("AbuseIPDB")
+        row = 1
+        ws_abuse[f'A{row}'] = "ABUSEIPDB REPUTATION"
+        ws_abuse[f'A{row}'].font = title_font
+        row += 2
+
+        if abuseipdb_data and 'error' not in abuseipdb_data:
+            abuse_rows = [
+                ["Threat Score", f"{abuseipdb_data.get('threat_score', 0)}/100"],
+                ["Abuse Confidence", f"{abuseipdb_data.get('abuse_confidence_score', 0)}%"],
+                ["Classification", abuseipdb_data.get('classification', 'Unknown')],
+                ["Total Reports", abuseipdb_data.get('total_reports', 0)],
+                ["Distinct Reporters", abuseipdb_data.get('details', {}).get('distinct_reporters', abuseipdb_data.get('total_reports', 0))],
+                ["Last Reported", abuseipdb_data.get('last_reported', 'N/A')],
+                ["Country", abuseipdb_data.get('country_code', 'Unknown')],
+                ["Usage Type", abuseipdb_data.get('usage_type', 'Unknown')],
+                ["ISP", abuseipdb_data.get('isp', 'Unknown')],
+                ["Domain", abuseipdb_data.get('domain', 'Unknown')]
+            ]
+
+            for label, value in abuse_rows:
+                ws_abuse[f'A{row}'] = label
+                ws_abuse[f'A{row}'].font = Font(bold=True)
+                ws_abuse[f'B{row}'] = value
+                row += 1
+
+            categories = abuseipdb_data.get('categories') or abuseipdb_data.get('details', {}).get('categories', {})
+            categories = categories if isinstance(categories, dict) else {}
+            if categories:
+                row += 1
+                ws_abuse[f'A{row}'] = "Category Breakdown"
+                ws_abuse[f'A{row}'].font = section_font
+                ws_abuse.merge_cells(f'A{row}:B{row}')
+                row += 1
+
+                for name, count in categories.items():
+                    ws_abuse[f'A{row}'] = f"• {name}"
+                    ws_abuse[f'B{row}'] = f"{count} reports"
+                    row += 1
+        else:
+            ws_abuse[f'A{row}'] = "No AbuseIPDB data available or lookup not applicable"
+
+        ws_abuse.column_dimensions['A'].width = 35
+        ws_abuse.column_dimensions['B'].width = 45
+
+        # ============================================
+        # WORKSHEET 7: GOOGLE OSINT
+        # ============================================
+        ws_google = wb.create_sheet("Google OSINT")
+        row = 1
+        ws_google[f'A{row}'] = "GOOGLE SEARCH INTELLIGENCE"
+        ws_google[f'A{row}'].font = title_font
+        row += 2
+
+        if google_formatted:
+            google_rows = [
+                ["Search Results", google_formatted.get('result_count', 0)],
+                ["Threat Score", f"{google_formatted.get('threat_score', 0)}/100"],
+                ["Classification", google_formatted.get('classification', 'Unknown')],
+                ["Risk Level", google_formatted.get('risk_level', 'Unknown')],
+                ["Unique Domains", google_formatted.get('total_domains', 0)]
+            ]
+
+            for label, value in google_rows:
+                ws_google[f'A{row}'] = label
+                ws_google[f'A{row}'].font = Font(bold=True)
+                ws_google[f'B{row}'] = value
+                row += 1
+
+            threat_indicators = google_formatted.get('threat_indicators', [])
+            if threat_indicators:
+                row += 1
+                ws_google[f'A{row}'] = "Threat Indicators"
+                ws_google[f'A{row}'].font = section_font
+                ws_google.merge_cells(f'A{row}:B{row}')
+                row += 1
+                for indicator in threat_indicators:
+                    ws_google[f'A{row}'] = f"• {indicator}"
+                    ws_google.merge_cells(f'A{row}:B{row}')
+                    row += 1
+
+            safe_indicators = google_formatted.get('safe_indicators', [])
+            if safe_indicators:
+                row += 1
+                ws_google[f'A{row}'] = "Safe Indicators"
+                ws_google[f'A{row}'].font = section_font
+                ws_google.merge_cells(f'A{row}:B{row}')
+                row += 1
+                for indicator in safe_indicators:
+                    ws_google[f'A{row}'] = f"• {indicator}"
+                    ws_google.merge_cells(f'A{row}:B{row}')
+                    row += 1
+
+            top_results = google_formatted.get('top_results', [])
+            if top_results:
+                row += 1
+                ws_google[f'A{row}'] = "Top Search Results"
+                ws_google[f'A{row}'].font = section_font
+                ws_google.merge_cells(f'A{row}:B{row}')
+                row += 1
+
+                ws_google[f'A{row}'] = "Title"
+                ws_google[f'B{row}'] = "URL / Snippet"
+                ws_google[f'A{row}'].font = header_font
+                ws_google[f'B{row}'].font = header_font
+                ws_google[f'A{row}'].fill = header_fill
+                ws_google[f'B{row}'].fill = header_fill
+                row += 1
+
+                for entry in top_results:
+                    ws_google[f'A{row}'] = entry.get('title', 'No title')
+                    ws_google[f'B{row}'] = entry.get('url', '#')
+                    row += 1
+                    ws_google[f'A{row}'] = "Snippet"
+                    ws_google[f'A{row}'].font = Font(italic=True)
+                    ws_google[f'B{row}'] = entry.get('snippet', 'No description')
+                    ws_google[f'B{row}'].alignment = Alignment(wrap_text=True)
+                    row += 1
+        else:
+            ws_google[f'A{row}'] = "No Google search intelligence available"
+
+        ws_google.column_dimensions['A'].width = 35
+        ws_google.column_dimensions['B'].width = 65
         
         # Save Excel file
         excel_file = io.BytesIO()
@@ -1481,14 +1994,14 @@ def export(format, ioc_id):
         
         # VirusTotal Report
         story.append(Paragraph("VIRUSTOTAL ANALYSIS", section_style))
-        if result.vt_report and 'error' not in result.vt_report:
-            stats = result.vt_report.get("last_analysis_stats", {})
+        if vt_data and 'error' not in vt_data:
+            stats = vt_data.get("last_analysis_stats", {})
             if not stats:
-                stats = result.vt_report.get("data", {}).get("attributes", {}).get("last_analysis_stats", {})
+                stats = vt_data.get("data", {}).get("attributes", {}).get("last_analysis_stats", {})
             
             if stats:
-                vt_data = [['Category', 'Count']] + [[k.capitalize(), str(v)] for k, v in stats.items()]
-                vt_table = Table(vt_data, colWidths=[3*inch, 3.5*inch])
+                vt_table_data = [['Category', 'Count']] + [[k.capitalize(), str(v)] for k, v in stats.items()]
+                vt_table = Table(vt_table_data, colWidths=[3*inch, 3.5*inch])
                 vt_table.setStyle(TableStyle([
                     ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4cc9f0')),
                     ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -1507,21 +2020,21 @@ def export(format, ioc_id):
         
         # Shodan Report
         story.append(Paragraph("SHODAN NETWORK INTELLIGENCE", section_style))
-        if result.shodan_report and 'error' not in result.shodan_report:
-            shodan_data = [
-                ['IP Address', result.shodan_report.get("ip_str", result.shodan_report.get("ip", "N/A"))],
-                ['Organization', result.shodan_report.get("org", "N/A")],
-                ['ISP', result.shodan_report.get("isp", "N/A")],
-                ['Country', result.shodan_report.get("country_name", "N/A")]
+        if shodan_data and 'error' not in shodan_data:
+            shodan_rows = [
+                ['IP Address', shodan_data.get("ip_str", shodan_data.get("ip", "N/A"))],
+                ['Organization', shodan_data.get("org", "N/A")],
+                ['ISP', shodan_data.get("isp", "N/A")],
+                ['Country', shodan_data.get("country_name", "N/A")]
             ]
             
-            ports = result.shodan_report.get("ports", [])
-            if not ports and "data" in result.shodan_report:
-                ports = [item.get("port") for item in result.shodan_report["data"] if "port" in item]
+            ports = shodan_data.get("ports", [])
+            if not ports and "data" in shodan_data:
+                ports = [item.get("port") for item in shodan_data["data"] if "port" in item]
             
-            shodan_data.append(['Open Ports', ", ".join(map(str, ports[:20])) if ports else "None"])
+            shodan_rows.append(['Open Ports', ", ".join(map(str, ports[:20])) if ports else "None"])
             
-            shodan_table = Table(shodan_data, colWidths=[2*inch, 4.5*inch])
+            shodan_table = Table(shodan_rows, colWidths=[2*inch, 4.5*inch])
             shodan_table.setStyle(TableStyle([
                 ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
                 ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
@@ -1536,26 +2049,26 @@ def export(format, ioc_id):
         
         # OTX Report
         story.append(Paragraph("ALIENVAULT OTX THREAT INTELLIGENCE", section_style))
-        if result.otx_report and 'error' not in result.otx_report:
-            otx_data = [
-                ['Threat Score', f"{result.otx_report.get('threat_score', 0)}/100"],
-                ['Classification', result.otx_report.get('classification', 'Unknown')],
-                ['Threat Pulses', str(result.otx_report.get('source_count', 0))]
+        if otx_data and 'error' not in otx_data:
+            otx_rows = [
+                ['Threat Score', f"{otx_data.get('threat_score', 0)}/100"],
+                ['Classification', otx_data.get('classification', 'Unknown')],
+                ['Threat Pulses', str(otx_data.get('source_count', 0))]
             ]
             
-            details = result.otx_report.get('details', {})
+            details = otx_data.get('details', {})
             if details:
-                otx_data.append(['Risk Level', details.get('risk_level', 'Unknown')])
+                otx_rows.append(['Risk Level', details.get('risk_level', 'Unknown')])
                 
                 malware = details.get('malware_families', [])
                 if malware:
-                    otx_data.append(['Malware Families', ", ".join(malware[:5])])
+                    otx_rows.append(['Malware Families', ", ".join(malware[:5])])
                 
                 tags = details.get('top_tags', [])
                 if tags:
-                    otx_data.append(['Top Tags', ", ".join(tags[:10])])
+                    otx_rows.append(['Top Tags', ", ".join(tags[:10])])
             
-            otx_table = Table(otx_data, colWidths=[2*inch, 4.5*inch])
+            otx_table = Table(otx_rows, colWidths=[2*inch, 4.5*inch])
             otx_table.setStyle(TableStyle([
                 ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
                 ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
@@ -1567,6 +2080,96 @@ def export(format, ioc_id):
         else:
             story.append(Paragraph("No OTX data available", styles['Normal']))
         
+        story.append(Spacer(1, 0.2*inch))
+
+        # AbuseIPDB Report
+        story.append(Paragraph("ABUSEIPDB REPUTATION", section_style))
+        if abuseipdb_data and 'error' not in abuseipdb_data:
+            abuse_table_data = [
+                ['Threat Score', f"{abuseipdb_data.get('threat_score', 0)}/100"],
+                ['Abuse Confidence', f"{abuseipdb_data.get('abuse_confidence_score', 0)}%"],
+                ['Classification', abuseipdb_data.get('classification', 'Unknown')],
+                ['Total Reports', str(abuseipdb_data.get('total_reports', 0))],
+                ['Distinct Reporters', str(abuseipdb_data.get('details', {}).get('distinct_reporters', abuseipdb_data.get('total_reports', 0)))],
+                ['Last Reported', abuseipdb_data.get('last_reported', 'N/A')],
+                ['Country', abuseipdb_data.get('country_code', 'Unknown')],
+                ['Usage Type', abuseipdb_data.get('usage_type', 'Unknown')],
+                ['ISP', abuseipdb_data.get('isp', 'Unknown')],
+                ['Domain', abuseipdb_data.get('domain', 'Unknown')]
+            ]
+
+            abuse_table = Table(abuse_table_data, colWidths=[2.2*inch, 4.3*inch])
+            abuse_table.setStyle(TableStyle([
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                ('BACKGROUND', (0, 0), (-1, -1), colors.beige),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('PADDING', (0, 0), (-1, -1), 8),
+            ]))
+            story.append(abuse_table)
+
+            categories = abuseipdb_data.get('categories') or abuseipdb_data.get('details', {}).get('categories', {})
+            categories = categories if isinstance(categories, dict) else {}
+            if categories:
+                story.append(Spacer(1, 0.1*inch))
+                story.append(Paragraph("Category Breakdown", styles['Heading3']))
+                for name, count in categories.items():
+                    story.append(Paragraph(f"• {name}: {count} reports", styles['Normal']))
+        else:
+            story.append(Paragraph("No AbuseIPDB data available or lookup not applicable", styles['Normal']))
+        story.append(Spacer(1, 0.2*inch))
+
+        # Google Search Intelligence
+        story.append(Paragraph("OPEN-SOURCE INTELLIGENCE (GOOGLE)", section_style))
+        if google_formatted:
+            google_table_data = [
+                ['Search Results', str(google_formatted.get('result_count', 0))],
+                ['Threat Score', f"{google_formatted.get('threat_score', 0)}/100"],
+                ['Classification', google_formatted.get('classification', 'Unknown')],
+                ['Risk Level', google_formatted.get('risk_level', 'Unknown')],
+                ['Unique Domains', str(google_formatted.get('total_domains', 0))]
+            ]
+
+            google_table = Table(google_table_data, colWidths=[2.2*inch, 4.3*inch])
+            google_table.setStyle(TableStyle([
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                ('BACKGROUND', (0, 0), (-1, -1), colors.beige),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('PADDING', (0, 0), (-1, -1), 8),
+            ]))
+            story.append(google_table)
+
+            threat_indicators = google_formatted.get('threat_indicators', [])
+            if threat_indicators:
+                story.append(Spacer(1, 0.1*inch))
+                story.append(Paragraph("Threat Indicators", styles['Heading3']))
+                story.append(Spacer(1, 0.05*inch))
+                for indicator in threat_indicators:
+                    story.append(Paragraph(f"• {indicator}", styles['Normal']))
+
+            safe_indicators = google_formatted.get('safe_indicators', [])
+            if safe_indicators:
+                story.append(Spacer(1, 0.1*inch))
+                story.append(Paragraph("Safe Indicators", styles['Heading3']))
+                story.append(Spacer(1, 0.05*inch))
+                for indicator in safe_indicators:
+                    story.append(Paragraph(f"• {indicator}", styles['Normal']))
+
+            top_results = google_formatted.get('top_results', [])
+            if top_results:
+                story.append(Spacer(1, 0.1*inch))
+                story.append(Paragraph("Top Search Results", styles['Heading3']))
+                story.append(Spacer(1, 0.05*inch))
+                for entry in top_results:
+                    story.append(Paragraph(f"<b>{entry.get('title', 'No title')}</b>", styles['Normal']))
+                    story.append(Paragraph(entry.get('url', '#'), styles['Normal']))
+                    snippet = entry.get('snippet', 'No description')
+                    story.append(Paragraph(snippet, styles['Normal']))
+                    story.append(Spacer(1, 0.05*inch))
+        else:
+            story.append(Paragraph("No Google search intelligence available", styles['Normal']))
+
         # Footer
         story.append(Spacer(1, 0.5*inch))
         footer_style = ParagraphStyle(
@@ -1619,9 +2222,9 @@ def login():
     form = LoginForm()
     if form.validate_on_submit():
         try:
-            # ✅ Changed from form.username.data to form.email.data
-            user = User.objects.get(email=form.email.data)
-            if check_password_hash(user.password, form.password.data):
+            email_input = form.email.data.strip()
+            user = User.objects(email__iexact=email_input).first()
+            if user and check_password_hash(user.password, form.password.data):
                 session["user_id"] = str(user.id)
                 session["username"] = user.email
                 flash("Login successful!", "success")
@@ -1631,7 +2234,8 @@ def login():
                 return redirect(next_page or url_for('main.index'))
             else:
                 flash("Invalid email or password", "danger")
-        except User.DoesNotExist:
+        except Exception as exc:
+            logger.exception("Login error for email %s: %s", form.email.data, exc)
             flash("Invalid email or password", "danger")
     
     return render_template("login.html", form=form)
@@ -1647,11 +2251,22 @@ def signup():
     if form.validate_on_submit():
         # ✅ Email validation is handled by form validator
         # No need to check here, form.validate_email() does it
+        email_input = form.email.data.strip()
+        existing_user = User.objects(email__iexact=email_input).first()
+        if existing_user:
+            flash("That email is already registered. Please log in or use a different email.", "danger")
+            return render_template("signup.html", form=form)
+
         hashed_pw = generate_password_hash(form.password.data, method='pbkdf2:sha256')
-        new_user = User(email=form.email.data, password=hashed_pw)
-        new_user.save()
-        flash("Account created successfully! Please login.", "success")
-        return redirect(url_for("main.login"))
+        new_user = User(email=email_input.lower(), password=hashed_pw)
+        try:
+            new_user.save()
+            flash("Account created successfully! Please login.", "success")
+            return redirect(url_for("main.login"))
+        except Exception as exc:
+            logger.exception("Signup error for email %s: %s", email_input, exc)
+            flash("We couldn't create your account right now. Please try again.", "danger")
+            return render_template("signup.html", form=form)
     
     return render_template("signup.html", form=form)
 
@@ -1665,27 +2280,34 @@ def dashboard():
     try:
         # Get all dashboard data
         stats = get_dashboard_stats()
-        top_ips = get_top_malicious_ips(limit=10)
-        top_domains = get_top_malicious_domains(limit=10)
+        top_ips, top_ip_scope = get_top_malicious_ips(limit=10)
+        top_domains, top_domain_scope = get_top_malicious_domains(limit=10)
         geo_data = get_geolocation_data()
         timeline = get_threat_timeline(days=30)
         recent_threats = get_recent_threats(limit=20)
         classification_breakdown = get_classification_breakdown()
         top_tags = get_top_threat_tags(limit=15)
         
+        # Debug logging
+        logger.info(f"Dashboard data - Stats: {stats is not None}, Top IPs: {len(top_ips)}, Geo Data: {len(geo_data)}")
+        logger.info(f"Top IPs data: {top_ips}")
+        logger.info(f"Geo data: {geo_data}")
+        
         return render_template(
             'dashboard.html',
             stats=stats,
             top_ips=top_ips,
             top_domains=top_domains,
-            geo_data=json.dumps(geo_data),
-            timeline=json.dumps(timeline),
+            top_ip_scope=top_ip_scope,
+            top_domain_scope=top_domain_scope,
+            geo_data=geo_data,
+            timeline=timeline,
             recent_threats=recent_threats,
             classification_breakdown=classification_breakdown,
             top_tags=top_tags
         )
     except Exception as e:
-        logger.error(f"Dashboard error: {e}")
+        logger.error(f"Dashboard error: {e}", exc_info=True)
         flash("Error loading dashboard", "danger")
         return redirect(url_for('main.index'))
 

@@ -11,6 +11,19 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _prepare_aggregate_results(items):
+    """Convert aggregation results into JSON-friendly dictionaries."""
+    formatted = []
+    for item in items:
+        if isinstance(item, dict):
+            cleaned = dict(item)
+            last_seen = cleaned.get('last_seen')
+            if isinstance(last_seen, datetime):
+                cleaned['last_seen'] = last_seen.isoformat()
+            formatted.append(cleaned)
+    return formatted
+
+
 def get_dashboard_stats():
     """
     Get overall dashboard statistics
@@ -57,12 +70,14 @@ def get_dashboard_stats():
 
 
 def get_top_malicious_ips(limit=10):
-    """
-    Get top malicious IPs with occurrence count
-    """
+    """Return top IP activity prioritized by malicious detections."""
     try:
+        primary_match = {
+            "type": "ip",
+            "classification": {"$in": ["Malicious", "Suspicious"]}
+        }
         pipeline = [
-            {"$match": {"type": "ip", "classification": {"$in": ["Malicious", "Suspicious"]}}},
+            {"$match": primary_match},
             {"$group": {
                 "_id": "$input_value",
                 "count": {"$sum": 1},
@@ -72,24 +87,45 @@ def get_top_malicious_ips(limit=10):
             {"$sort": {"count": -1}},
             {"$limit": limit}
         ]
-        
+
         results = list(IOCResult.objects.aggregate(pipeline))
-        return results
+        if results:
+            logger.info(f"📊 Top Malicious IPs: Found {len(results)} malicious/suspicious results")
+            return _prepare_aggregate_results(results), "malicious"
+
+        fallback_match = {
+            "type": "ip",
+            "classification": {"$nin": [None, "", "Pending", "Loading...", "Unknown"]}
+        }
+        fallback_pipeline = [
+            {"$match": fallback_match},
+            {"$group": {
+                "_id": "$input_value",
+                "count": {"$sum": 1},
+                "classification": {"$first": "$classification"},
+                "last_seen": {"$max": "$timestamp"}
+            }},
+            {"$sort": {"count": -1}},
+            {"$limit": limit}
+        ]
+
+        fallback_results = list(IOCResult.objects.aggregate(fallback_pipeline))
+        logger.info(f"📊 Top IPs fallback: Showing {len(fallback_results)} results due to no malicious detections")
+        return _prepare_aggregate_results(fallback_results), "all"
     except Exception as e:
         logger.error(f"Error getting top malicious IPs: {e}")
-        return []
+        return [], "error"
 
 
 def get_top_malicious_domains(limit=10):
-    """
-    Get top malicious domains/URLs with occurrence count
-    """
+    """Return top domain/URL activity prioritized by malicious detections."""
     try:
+        primary_match = {
+            "type": {"$in": ["domain", "url"]},
+            "classification": {"$in": ["Malicious", "Suspicious"]}
+        }
         pipeline = [
-            {"$match": {
-                "type": {"$in": ["domain", "url"]},
-                "classification": {"$in": ["Malicious", "Suspicious"]}
-            }},
+            {"$match": primary_match},
             {"$group": {
                 "_id": "$input_value",
                 "count": {"$sum": 1},
@@ -100,59 +136,118 @@ def get_top_malicious_domains(limit=10):
             {"$sort": {"count": -1}},
             {"$limit": limit}
         ]
-        
+
         results = list(IOCResult.objects.aggregate(pipeline))
-        return results
+        if results:
+            return _prepare_aggregate_results(results), "malicious"
+
+        fallback_match = {
+            "type": {"$in": ["domain", "url"]},
+            "classification": {"$nin": [None, "", "Pending", "Loading...", "Unknown"]}
+        }
+        fallback_pipeline = [
+            {"$match": fallback_match},
+            {"$group": {
+                "_id": "$input_value",
+                "count": {"$sum": 1},
+                "type": {"$first": "$type"},
+                "classification": {"$first": "$classification"},
+                "last_seen": {"$max": "$timestamp"}
+            }},
+            {"$sort": {"count": -1}},
+            {"$limit": limit}
+        ]
+
+        fallback_results = list(IOCResult.objects.aggregate(fallback_pipeline))
+        return _prepare_aggregate_results(fallback_results), "all"
     except Exception as e:
         logger.error(f"Error getting top malicious domains: {e}")
-        return []
+        return [], "error"
 
 
 def get_geolocation_data():
     """
     Get geographic distribution of malicious IPs
-    Returns data formatted for heatmap
+    Returns data formatted for chart display
     """
     try:
-        # Get all malicious IPs
+        from app.geolocation import GeoCache
+        
+        # Get all malicious/suspicious IPs
         malicious_ips = IOCResult.objects(
             Q(type="ip") & Q(classification__in=["Malicious", "Suspicious"])
         )
         
-        geo_data = []
+        logger.info(f"🌍 Geolocation: Analyzing {malicious_ips.count()} malicious/suspicious IPs")
+        
         country_counts = Counter()
+        ips_without_geo = []
         
         for result in malicious_ips:
-            # Extract country from OTX or Shodan report
             country = None
-            lat = None
-            lon = None
             
-            # Try OTX first
-            if result.otx_report and 'details' in result.otx_report:
-                details = result.otx_report['details']
-                country = details.get('country', '')
-                
-            # Fallback to Shodan
+            # First try to get from GeoCache
+            geo_cache = GeoCache.objects(ip=result.input_value).first()
+            if geo_cache and geo_cache.country:
+                country = geo_cache.country
+            
+            # Try to get country from Shodan report
             if not country and result.shodan_report:
-                country = result.shodan_report.get('country_name', '')
+                # Shodan can have nested structure
+                if isinstance(result.shodan_report, dict):
+                    # Check various possible locations
+                    country = (
+                        result.shodan_report.get('country') or
+                        result.shodan_report.get('country_name') or
+                        result.shodan_report.get('details', {}).get('country') or
+                        result.shodan_report.get('data', {}).get('country')
+                    )
             
-            if country:
+            # Fallback to VirusTotal report
+            if not country and result.vt_report:
+                if isinstance(result.vt_report, dict):
+                    country = (
+                        result.vt_report.get('country') or
+                        result.vt_report.get('details', {}).get('country') or
+                        result.vt_report.get('data', {}).get('attributes', {}).get('country')
+                    )
+            
+            # Fallback to OTX report
+            if not country and result.otx_report:
+                if isinstance(result.otx_report, dict):
+                    country = (
+                        result.otx_report.get('country') or
+                        result.otx_report.get('details', {}).get('country')
+                    )
+            
+            # Only count valid countries
+            if country and country.strip() and country not in ["Unknown", "", "N/A", "None"]:
                 country_counts[country] += 1
-                
-                # For now, we'll return country counts
-                # You can add lat/lon lookup later with geocoding
+            else:
+                ips_without_geo.append(result.input_value)
         
-        # Convert to list format
+        # Convert to list format for Chart.js
+        geo_data = []
         for country, count in country_counts.most_common(20):
             geo_data.append({
                 'country': country,
                 'count': count
             })
         
+        logger.info(f"   Geographic data: {len(geo_data)} countries found")
+        logger.info(f"   Top countries: {dict(country_counts.most_common(5))}")
+        if len(ips_without_geo) > 0:
+            logger.warning(f"   ⚠️ {len(ips_without_geo)} IPs without geolocation data: {ips_without_geo[:5]}")
+        
+        if len(geo_data) == 0:
+            logger.warning("   ℹ️ No geographic data available. This is normal if:")
+            logger.warning("      1. No malicious IPs have been scanned yet")
+            logger.warning("      2. Shodan/VT didn't return country information")
+            logger.warning("      3. All scanned IPs are classified as Benign")
+        
         return geo_data
     except Exception as e:
-        logger.error(f"Error getting geolocation data: {e}")
+        logger.error(f"Error getting geolocation data: {e}", exc_info=True)
         return []
 
 
@@ -207,16 +302,17 @@ def get_recent_threats(limit=20):
     """
     try:
         recent = IOCResult.objects(
-            classification__in=["Malicious", "Suspicious"]
+            classification__nin=[None, "", "Pending", "Loading...", "Unknown"]
         ).order_by('-timestamp').limit(limit)
         
         feed = []
         for item in recent:
+            classification = item.classification or "Unknown"
             feed.append({
                 'id': str(item.id),
                 'input': item.input_value,
                 'type': item.type,
-                'classification': item.classification,
+                'classification': classification,
                 'timestamp': item.timestamp.isoformat() if item.timestamp else None,
                 'threat_score': item.otx_report.get('threat_score', 0) if item.otx_report else 0
             })

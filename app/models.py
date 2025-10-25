@@ -21,6 +21,7 @@ class IOCResult(Document):
     classification = StringField(required=False, default="Pending")
     vt_report = DictField()
     shodan_report = DictField()
+    abuseipdb_report = DictField()
     otx_report = DictField()
     scraped_data = ListField()
     timestamp = DateTimeField(default=datetime.utcnow)
@@ -36,6 +37,7 @@ class IOCResult(Document):
             'classification': self.classification,
             'vt_report': self.vt_report,
             'shodan_report': self.shodan_report,
+            'abuseipdb_report': self.abuseipdb_report,
             'otx_report': self.otx_report,
             'scraped_data': self.scraped_data,
             'enrichment_context': self.enrichment_context,

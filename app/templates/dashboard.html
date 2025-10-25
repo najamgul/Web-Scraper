@@ -3,11 +3,10 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="theme-color" content="#0f172a">
 
 <!-- Add responsive CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='responsive.css') }}">
@@ -49,18 +48,36 @@
             font-weight: 700;
             background: linear-gradient(135deg, #4361ee 0%, #4cc9f0 100%);
             -webkit-background-clip: text;
+            background-clip: text;
             -webkit-text-fill-color: transparent;
         }
         
+        .navbar-links {
+            display: flex;
+            align-items: center;
+            gap: 1.25rem;
+        }
+
+        .navbar-links .nav-link,
         .navbar-links a {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 0.75rem 1.2rem;
+            border-radius: 999px;
+            background: rgba(76, 201, 240, 0.12);
             color: #cbd5e1;
             text-decoration: none;
-            margin-left: 2rem;
-            transition: color 0.3s;
+            border: 1px solid transparent;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
         }
-        
+
+        .navbar-links .nav-link:hover,
         .navbar-links a:hover {
             color: #4cc9f0;
+            background: rgba(76, 201, 240, 0.2);
         }
         
         /* Container */
@@ -80,6 +97,7 @@
         
         .stat-card {
             background: rgba(30, 41, 59, 0.8);
+            -webkit-backdrop-filter: blur(10px);
             backdrop-filter: blur(10px);
             border-radius: 15px;
             padding: 2rem;
@@ -127,6 +145,7 @@
         
         .chart-card {
             background: rgba(30, 41, 59, 0.8);
+            -webkit-backdrop-filter: blur(10px);
             backdrop-filter: blur(10px);
             border-radius: 15px;
             padding: 2rem;
@@ -219,6 +238,7 @@
             overflow: hidden;
         }
         
+        /* Mobile-specific inline styles */
         @media (max-width: 768px) {
             .charts-grid {
                 grid-template-columns: 1fr;
@@ -226,41 +246,122 @@
             .stats-grid {
                 grid-template-columns: 1fr;
             }
+            
+            /* Ensure table wrapper scrolls horizontally on mobile */
+            .table-wrapper {
+                overflow-x: auto;
+            }
+            
+            /* Improve two-column layout on mobile */
+            .dashboard-bottom-section {
+                grid-template-columns: 1fr !important;
+            }
+        }
+        
+        /* Table wrapper for horizontal scrolling */
+        .table-wrapper {
+            width: 100%;
+            overflow-x: auto;
+        }
+        
+        /* Dashboard bottom section grid */
+        .dashboard-bottom-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+        
+        /* No data styling */
+        .no-data {
+            text-align: center;
+            color: #94a3b8;
+        }
+        
+        .no-data-message {
+            text-align: center;
+            padding: 2rem 1rem;
+            color: #94a3b8;
+        }
+        
+        .no-data-message p {
+            margin: 0.5rem 0;
+            font-size: 1rem;
+        }
+        
+        .no-data-message .hint {
+            font-size: 0.9rem;
+            color: #64748b;
+            font-style: italic;
+        }
+
+        .scope-hint {
+            margin-top: 0.5rem;
+            font-size: 0.9rem;
+            color: #94a3b8;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+        
+        /* Feed item header */
+        .feed-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 0.5rem;
+            flex-wrap: wrap;
         }
         .nav-link {
-    display: block;
-    width: 100%;
-    padding: 1rem;
-    background: rgba(30, 41, 59, 0.6);
-    color: #cbd5e1;
-    text-decoration: none;
-    border-radius: 12px;
-    font-size: 1rem;
-    border-left: 3px solid #4cc9f0;
-    margin-bottom: 1.5rem;
-    transition: all 0.3s ease;
-    cursor: pointer;
-    touch-action: manipulation;
-    border: none;
-    border-left: 3px solid #4cc9f0;
-    font-family: inherit;
-    text-align: left;
-    -webkit-tap-highlight-color: rgba(76, 201, 240, 0.3);
-}
+            border: none;
+            font-family: inherit;
+            background: none;
+        }
 
-.nav-link:active {
-    background: rgba(30, 41, 59, 0.9);
-    transform: translateX(5px);
-}
+        .nav-link.logout-link {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.35);
+            color: #fca5a5;
+        }
 
-.nav-link.logout-link {
-    border-left-color: #ef4444;
-    background: rgba(239, 68, 68, 0.2);
-}
+        .nav-link.logout-link:hover {
+            background: rgba(239, 68, 68, 0.25);
+            color: #fecaca;
+        }
 
-.nav-link.logout-link:active {
-    background: rgba(239, 68, 68, 0.3);
-}
+        @media (max-width: 768px) {
+            .navbar-links {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 1.5rem;
+            }
+
+            .navbar-links .nav-link,
+            .navbar-links a {
+                display: block;
+                width: 100%;
+                background: rgba(30, 41, 59, 0.6);
+                border-radius: 12px;
+                border-left: 3px solid #4cc9f0;
+                text-align: left;
+                padding: 1rem;
+            }
+
+            .nav-link.logout-link {
+                border-left: 3px solid #ef4444;
+                background: rgba(239, 68, 68, 0.2);
+            }
+
+            .nav-link.logout-link:hover {
+                background: rgba(239, 68, 68, 0.3);
+            }
+        }
+
+        @supports (-webkit-overflow-scrolling: touch) {
+            .table-wrapper {
+                -webkit-overflow-scrolling: touch;
+            }
+        }
     </style>
 </head>
 <body>
@@ -270,7 +371,7 @@
             <i class="fas fa-chart-line"></i> Threat Intelligence Dashboard
         </div>
         
-        <button class="navbar-toggle" id="dashNavToggle" type="button">
+        <button class="navbar-toggle" id="dashNavToggle" type="button" aria-label="Open navigation menu" title="Open menu">
             <i class="fas fa-bars"></i>
         </button>
     </div>
@@ -278,7 +379,7 @@
     <div class="navbar-overlay" id="dashNavOverlay"></div>
     
     <div class="navbar-links" id="dashNavMenu">
-        <button class="navbar-close" id="dashNavClose" type="button">
+        <button class="navbar-close" id="dashNavClose" type="button" aria-label="Close navigation menu" title="Close menu">
             <i class="fas fa-times"></i>
         </button>
         
@@ -435,9 +536,23 @@
             <!-- Top Malicious IPs -->
             <div class="chart-card">
                 <h3 class="chart-title"><i class="fas fa-chart-bar"></i> Top Malicious IPs</h3>
+                {% if top_ip_scope != 'malicious' and top_ips|length > 0 %}
+                <div class="scope-hint"><i class="fas fa-info-circle"></i>No malicious detections yet — showing latest classified IP activity.</div>
+                {% elif top_ip_scope == 'error' %}
+                <div class="no-data-message">
+                    <p><i class="fas fa-exclamation-triangle"></i> Unable to load IP analytics</p>
+                    <p class="hint">Check MongoDB connection or aggregation pipeline.</p>
+                </div>
+                {% endif %}
                 <div class="chart-wrapper">
                     <canvas id="topIPsChart"></canvas>
                 </div>
+                {% if top_ips|length == 0 %}
+                <div class="no-data-message">
+                    <p><i class="fas fa-info-circle"></i> No malicious IPs detected yet</p>
+                    <p class="hint">Scan some IP addresses classified as Malicious or Suspicious to see data here</p>
+                </div>
+                {% endif %}
             </div>
             
             <!-- Geographic Distribution -->
@@ -446,36 +561,54 @@
                 <div class="chart-wrapper">
                     <canvas id="geoChart"></canvas>
                 </div>
+                {% if geo_data == '[]' or geo_data == [] %}
+                <div class="no-data-message">
+                    <p><i class="fas fa-info-circle"></i> No geographic data available</p>
+                    <p class="hint">Scan malicious IPs with Shodan enabled to see geographic distribution</p>
+                </div>
+                {% endif %}
             </div>
         </div>
         
         <!-- Tables and Live Feed -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 2rem;">
+        <div class="dashboard-bottom-section">
             <!-- Top Malicious Domains Table -->
             <div class="threat-table">
                 <h3 class="chart-title"><i class="fas fa-list"></i> Top Malicious Domains/URLs</h3>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Domain/URL</th>
-                            <th>Type</th>
-                            <th>Count</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for domain in top_domains[:10] %}
-                        <tr>
-                            <td>{{ domain._id[:50] }}...</td>
-                            <td>{{ domain.type }}</td>
-                            <td>{{ domain.count }}</td>
-                            <td><span class="badge badge-{{ domain.classification.lower() }}">{{ domain.classification }}</span></td>
-                        </tr>
-                        {% else %}
-                        <tr><td colspan="4" style="text-align:center; color:#94a3b8;">No data available</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                {% if top_domain_scope != 'malicious' and top_domains|length > 0 %}
+                <div class="scope-hint"><i class="fas fa-info-circle"></i>No malicious domains detected yet — showing latest classified domain activity.</div>
+                {% elif top_domain_scope == 'error' %}
+                <div class="no-data-message">
+                    <p><i class="fas fa-exclamation-triangle"></i> Unable to load domain analytics</p>
+                    <p class="hint">Verify aggregation pipeline is working correctly.</p>
+                </div>
+                {% endif %}
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Domain/URL</th>
+                                <th>Type</th>
+                                <th>Count</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for domain in top_domains[:10] %}
+                            {% set domain_value = domain._id %}
+                            {% set domain_classification = domain.classification or 'Unknown' %}
+                            <tr>
+                                <td>{{ domain_value[:50] }}{% if domain_value|length > 50 %}...{% endif %}</td>
+                                <td>{{ domain.type }}</td>
+                                <td>{{ domain.count }}</td>
+                                <td><span class="badge badge-{{ domain_classification|lower }}">{{ domain_classification }}</span></td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="4" class="no-data">No data available</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
             </div>
             
             <!-- Live Threat Feed -->
@@ -483,10 +616,11 @@
                 <h3 class="chart-title"><i class="fas fa-rss"></i> Live Threat Feed</h3>
                 <div id="threatFeed">
                     {% for threat in recent_threats %}
-                    <div class="feed-item {{ threat.classification.lower() }}">
-                        <div style="display: flex; justify-content: space-between;">
+                    {% set feed_classification = threat.classification or 'Unknown' %}
+                    <div class="feed-item {{ feed_classification|lower }}">
+                        <div class="feed-item-header">
                             <strong>{{ threat.input }}</strong>
-                            <span class="badge badge-{{ threat.classification.lower() }}">{{ threat.classification }}</span>
+                            <span class="badge badge-{{ feed_classification|lower }}">{{ feed_classification }}</span>
                         </div>
                         <div class="feed-time">{{ threat.type }} • {{ threat.timestamp[:19] if threat.timestamp else 'N/A' }}</div>
                     </div>
@@ -496,21 +630,38 @@
         </div>
     </div>
     
+    <script id="dashboard-context" type="application/json">
+        {{ {
+            'stats': stats or {},
+            'top_ips': top_ips or [],
+            'timeline': timeline or {},
+            'geo_data': geo_data or []
+        } | tojson | safe }}
+    </script>
+
     <script>
-        // Classification Pie Chart
+        const contextElement = document.getElementById('dashboard-context');
+        const dashboardData = contextElement ? JSON.parse(contextElement.textContent || '{}') : {};
+        const dashboardStats = dashboardData.stats || null;
+        const topIpsRaw = Array.isArray(dashboardData.top_ips) ? dashboardData.top_ips : [];
+        const timelineData = dashboardData.timeline || {};
+        const geoData = Array.isArray(dashboardData.geo_data) ? dashboardData.geo_data : [];
+        
+        const classificationCounts = dashboardStats ? [
+            dashboardStats.malicious || 0,
+            dashboardStats.benign || 0,
+            dashboardStats.suspicious || 0,
+            dashboardStats.informational || 0,
+            dashboardStats.unknown || 0
+        ] : [0, 0, 0, 0, 0];
+
         const classificationCtx = document.getElementById('classificationChart').getContext('2d');
         new Chart(classificationCtx, {
             type: 'doughnut',
             data: {
                 labels: ['Malicious', 'Benign', 'Suspicious', 'Informational', 'Unknown'],
                 datasets: [{
-                    data: [
-                        {{ stats.malicious if stats else 0 }},
-                        {{ stats.benign if stats else 0 }},
-                        {{ stats.suspicious if stats else 0 }},
-                        {{ stats.informational if stats else 0 }},
-                        {{ stats.unknown if stats else 0 }}
-                    ],
+                    data: classificationCounts,
                     backgroundColor: ['#e74c3c', '#2ecc71', '#f39c12', '#3498db', '#95a5a6']
                 }]
             },
@@ -524,10 +675,9 @@
         });
         
         // Timeline Chart
-        const timelineData = {{ timeline | safe }};
         const dates = Object.keys(timelineData).sort();
-        const maliciousData = dates.map(d => timelineData[d].Malicious);
-        const benignData = dates.map(d => timelineData[d].Benign);
+    const maliciousData = dates.map(d => (timelineData[d] && timelineData[d].Malicious) ? timelineData[d].Malicious : 0);
+    const benignData = dates.map(d => (timelineData[d] && timelineData[d].Benign) ? timelineData[d].Benign : 0);
         
         const timelineCtx = document.getElementById('timelineChart').getContext('2d');
         new Chart(timelineCtx, {
@@ -561,31 +711,48 @@
             }
         });
         
-        // Top IPs Chart
+    // Top IPs Chart
+    const topIPsLabels = topIpsRaw.map(ip => ip._id || 'Unknown');
+    const topIPsData = topIpsRaw.map(ip => ip.count || 0);
+        
+        console.log('Top IPs Data:', topIPsData);
+        console.log('Top IPs Labels:', topIPsLabels);
+        
         const topIPsCtx = document.getElementById('topIPsChart').getContext('2d');
         new Chart(topIPsCtx, {
             type: 'bar',
             data: {
-                labels: [{% for ip in top_ips %}'{{ ip._id }}'{% if not loop.last %},{% endif %}{% endfor %}],
+                labels: topIPsLabels,
                 datasets: [{
                     label: 'Detections',
-                    data: [{% for ip in top_ips %}{{ ip.count }}{% if not loop.last %},{% endif %}{% endfor %}],
+                    data: topIPsData,
                     backgroundColor: '#e74c3c'
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
+                plugins: { 
+                    legend: { display: false },
+                    title: {
+                        display: topIPsData.length === 0,
+                        text: 'No malicious IPs detected yet',
+                        color: '#94a3b8'
+                    }
+                },
                 scales: {
                     x: { ticks: { color: '#e2e8f0' }, grid: { color: 'rgba(255,255,255,0.1)' } },
-                    y: { ticks: { color: '#e2e8f0' }, grid: { color: 'rgba(255,255,255,0.1)' } }
+                    y: { 
+                        ticks: { color: '#e2e8f0', beginAtZero: true }, 
+                        grid: { color: 'rgba(255,255,255,0.1)' } 
+                    }
                 }
             }
         });
         
-        // Geographic Chart
-        const geoData = {{ geo_data | safe }};
+    // Geographic Chart
+    console.log('Geographic Data:', geoData);
+        
         const geoCtx = document.getElementById('geoChart').getContext('2d');
         new Chart(geoCtx, {
             type: 'bar',
@@ -601,9 +768,19 @@
                 indexAxis: 'y',
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
+                plugins: { 
+                    legend: { display: false },
+                    title: {
+                        display: geoData.length === 0,
+                        text: 'No geographic data available yet',
+                        color: '#94a3b8'
+                    }
+                },
                 scales: {
-                    x: { ticks: { color: '#e2e8f0' }, grid: { color: 'rgba(255,255,255,0.1)' } },
+                    x: { 
+                        ticks: { color: '#e2e8f0', beginAtZero: true }, 
+                        grid: { color: 'rgba(255,255,255,0.1)' } 
+                    },
                     y: { ticks: { color: '#e2e8f0' }, grid: { color: 'rgba(255,255,255,0.1)' } }
                 }
             }
@@ -615,16 +792,22 @@
                 .then(res => res.json())
                 .then(threats => {
                     const feedContainer = document.getElementById('threatFeed');
-                    feedContainer.innerHTML = threats.map(t => `
-                        <div class="feed-item ${t.classification.toLowerCase()}">
-                            <div style="display: flex; justify-content: space-between;">
+                    feedContainer.innerHTML = threats.map(t => {
+                        const classificationLabel = t.classification ? t.classification : 'Unknown';
+                        const badgeClass = classificationLabel.toLowerCase();
+                        const timestamp = t.timestamp ? t.timestamp.substring(0, 19) : 'N/A';
+                        return `
+                        <div class="feed-item ${badgeClass}">
+                            <div class="feed-item-header">
                                 <strong>${t.input}</strong>
-                                <span class="badge badge-${t.classification.toLowerCase()}">${t.classification}</span>
+                                <span class="badge badge-${badgeClass}">${classificationLabel}</span>
                             </div>
-                            <div class="feed-time">${t.type} • ${t.timestamp ? t.timestamp.substring(0, 19) : 'N/A'}</div>
+                            <div class="feed-time">${t.type} • ${timestamp}</div>
                         </div>
-                    `).join('');
-                });
+                    `;
+                    }).join('');
+                })
+                .catch(err => console.error('Error refreshing feed:', err));
         }, 30000);
     </script>
 </body>

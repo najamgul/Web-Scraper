@@ -275,7 +275,17 @@ def shodan_lookup(ip):
                 },
                 "raw": data
             }
+        elif response.status_code == 401:
+            logger.error("❌ Shodan: Invalid API key")
+            return {"error": "Invalid Shodan API key", "threat_score": 0, "classification": "Unknown", "details": {}}
+        elif response.status_code == 403:
+            logger.error("❌ Shodan: Access denied (insufficient plan or forbidden endpoint)")
+            return {"error": "Shodan access denied (check plan permissions)", "threat_score": 0, "classification": "Unknown", "details": {}}
+        elif response.status_code == 429:
+            logger.error("❌ Shodan: Rate limit exceeded")
+            return {"error": "Shodan rate limit exceeded", "threat_score": 0, "classification": "Unknown", "details": {}}
         else:
+            logger.error(f"❌ Shodan API error {response.status_code}: {response.text}")
             return {"error": f"Shodan API error: {response.status_code}", "threat_score": 0, "classification": "Unknown", "details": {}}
     
     except Exception as e:
