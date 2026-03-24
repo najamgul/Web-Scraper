@@ -67,3 +67,4 @@ exports/**/*.xlsx
 *.txt
 *.pptx
 *.csv
+.env.example
