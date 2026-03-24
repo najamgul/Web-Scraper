@@ -1247,6 +1247,16 @@
             
             <!-- Menu Items -->
             <div class="menu-items">
+                <button class="menu-link" data-href="{{ url_for('bulk.bulk_scan_page') }}" type="button">
+                    <i class="fas fa-layer-group"></i>
+                    <span>Bulk Scan</span>
+                </button>
+                
+                <button class="menu-link" data-href="{{ url_for('bulk.investigations_list') }}" type="button">
+                    <i class="fas fa-book"></i>
+                    <span>Investigations</span>
+                </button>
+                
                 <button class="menu-link" data-href="{{ url_for('main.dashboard') }}" type="button">
                     <i class="fas fa-chart-line"></i>
                     <span>Dashboard</span>

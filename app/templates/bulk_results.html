@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bulk Scan Results - {{ bulk.name }}</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='responsive.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); min-height: 100vh; color: #e2e8f0; }
+        
+        .navbar { background: rgba(30, 41, 59, 0.95); padding: 1rem 2rem; box-shadow: 0 4px 15px rgba(0,0,0,0.3); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
+        .navbar-brand { font-size: 1.5rem; font-weight: 700; background: linear-gradient(135deg, #4361ee, #4cc9f0); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; display: flex; align-items: center; gap: 0.8rem; }
+        .navbar-links { display: flex; gap: 1rem; }
+        .navbar-links a { padding: 0.6rem 1.2rem; border-radius: 999px; background: rgba(76, 201, 240, 0.12); color: #cbd5e1; text-decoration: none; font-weight: 600; transition: all 0.3s; display: flex; align-items: center; gap: 0.5rem; }
+        .navbar-links a:hover { background: rgba(76, 201, 240, 0.25); color: #4cc9f0; }
+        
+        .container { max-width: 1400px; margin: 0 auto; padding: 2rem; }
+        
+        h1 { font-size: 2.2rem; font-weight: 800; background: linear-gradient(135deg, #4361ee, #4cc9f0); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 0.5rem; }
+        .subtitle { color: #94a3b8; font-size: 1rem; margin-bottom: 2rem; }
+        
+        /* Summary Cards */
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1.2rem; margin-bottom: 2.5rem; }
+        .summary-card { background: rgba(30, 41, 59, 0.8); backdrop-filter: blur(10px); border-radius: 15px; padding: 1.5rem; text-align: center; border: 1px solid rgba(255,255,255,0.08); transition: transform 0.3s; }
+        .summary-card:hover { transform: translateY(-3px); }
+        .summary-card .value { font-size: 2.5rem; font-weight: 800; }
+        .summary-card .label { font-size: 0.85rem; color: #94a3b8; margin-top: 0.3rem; }
+        .summary-card.total { border-left: 4px solid #4cc9f0; }
+        .summary-card.total .value { color: #4cc9f0; }
+        .summary-card.malicious { border-left: 4px solid #e74c3c; }
+        .summary-card.malicious .value { color: #e74c3c; }
+        .summary-card.benign { border-left: 4px solid #2ecc71; }
+        .summary-card.benign .value { color: #2ecc71; }
+        .summary-card.suspicious { border-left: 4px solid #f59e0b; }
+        .summary-card.suspicious .value { color: #f59e0b; }
+        .summary-card.zeroday { border-left: 4px solid #7c3aed; }
+        .summary-card.zeroday .value { color: #7c3aed; }
+        .summary-card.unknown { border-left: 4px solid #64748b; }
+        .summary-card.unknown .value { color: #64748b; }
+        
+        /* Chart */
+        .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2.5rem; }
+        .chart-card { background: rgba(30, 41, 59, 0.8); border-radius: 15px; padding: 2rem; border: 1px solid rgba(255,255,255,0.08); }
+        .chart-card h3 { font-size: 1.2rem; margin-bottom: 1rem; color: #e2e8f0; display: flex; align-items: center; gap: 0.6rem; }
+        .chart-wrapper { height: 280px; position: relative; }
+        
+        /* Results Table */
+        .results-table-container { background: rgba(30, 41, 59, 0.8); border-radius: 15px; padding: 2rem; border: 1px solid rgba(255,255,255,0.08); }
+        .results-table-container h3 { font-size: 1.3rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.6rem; }
+        
+        .filter-bar { display: flex; gap: 0.8rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+        .filter-btn { padding: 0.5rem 1rem; border-radius: 999px; border: 1px solid rgba(255,255,255,0.1); background: rgba(15, 23, 42, 0.5); color: #94a3b8; cursor: pointer; font-weight: 600; font-size: 0.85rem; transition: all 0.3s; }
+        .filter-btn:hover, .filter-btn.active { background: rgba(67, 97, 238, 0.2); color: #4cc9f0; border-color: rgba(67, 97, 238, 0.4); }
+        
+        table { width: 100%; border-collapse: collapse; }
+        th { background: rgba(15, 23, 42, 0.6); padding: 0.8rem 1rem; text-align: left; color: #4cc9f0; font-weight: 600; font-size: 0.85rem; text-transform: uppercase; }
+        td { padding: 0.8rem 1rem; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 0.95rem; }
+        tr:hover { background: rgba(255,255,255,0.03); }
+        
+        .cls-badge { padding: 0.3rem 0.8rem; border-radius: 999px; font-weight: 700; font-size: 0.8rem; text-transform: capitalize; }
+        .cls-malicious { background: rgba(231, 76, 60, 0.15); color: #e74c3c; border: 1px solid rgba(231, 76, 60, 0.3); }
+        .cls-benign { background: rgba(46, 204, 113, 0.15); color: #2ecc71; border: 1px solid rgba(46, 204, 113, 0.3); }
+        .cls-suspicious { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
+        .cls-potential-zero-day { background: rgba(124, 58, 237, 0.15); color: #7c3aed; border: 1px solid rgba(124, 58, 237, 0.3); }
+        .cls-unknown, .cls-pending { background: rgba(100, 116, 139, 0.15); color: #94a3b8; border: 1px solid rgba(100, 116, 139, 0.3); }
+        
+        .ioc-link { color: #4cc9f0; text-decoration: none; transition: color 0.3s; }
+        .ioc-link:hover { color: #4361ee; text-decoration: underline; }
+        
+        .action-btns { display: flex; gap: 0.8rem; margin-top: 2rem; flex-wrap: wrap; }
+        .action-btn { padding: 0.8rem 1.5rem; border-radius: 12px; text-decoration: none; font-weight: 600; display: flex; align-items: center; gap: 0.5rem; transition: all 0.3s; border: none; cursor: pointer; font-size: 0.95rem; }
+        .btn-back { background: rgba(76, 201, 240, 0.15); color: #4cc9f0; border: 1px solid rgba(76, 201, 240, 0.3); }
+        .btn-back:hover { background: rgba(76, 201, 240, 0.25); }
+        .btn-investigate { background: rgba(124, 58, 237, 0.15); color: #a78bfa; border: 1px solid rgba(124, 58, 237, 0.3); }
+        .btn-investigate:hover { background: rgba(124, 58, 237, 0.25); }
+        
+        @media (max-width: 768px) {
+            .chart-row { grid-template-columns: 1fr; }
+            .summary-grid { grid-template-columns: repeat(3, 1fr); }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-brand"><i class="fas fa-shield-alt"></i> ThreatIntel</div>
+        <div class="navbar-links">
+            <a href="{{ url_for('main.index') }}"><i class="fas fa-search"></i> Scanner</a>
+            <a href="{{ url_for('bulk.bulk_scan_page') }}"><i class="fas fa-layer-group"></i> Bulk Scan</a>
+            <a href="{{ url_for('bulk.investigations_list') }}"><i class="fas fa-book"></i> Investigations</a>
+            <a href="{{ url_for('main.dashboard') }}"><i class="fas fa-chart-line"></i> Dashboard</a>
+        </div>
+    </nav>
+    
+    <div class="container">
+        <h1><i class="fas fa-chart-bar"></i> {{ bulk.name }}</h1>
+        <p class="subtitle">Completed {{ bulk.completed_at[:16] if bulk.completed_at else 'N/A' }} • {{ bulk.total_iocs }} IOCs scanned</p>
+        
+        <!-- Summary Cards -->
+        <div class="summary-grid">
+            <div class="summary-card total"><div class="value">{{ bulk.total_iocs }}</div><div class="label">Total Scanned</div></div>
+            <div class="summary-card malicious"><div class="value">{{ bulk.malicious_count }}</div><div class="label">Malicious</div></div>
+            <div class="summary-card benign"><div class="value">{{ bulk.benign_count }}</div><div class="label">Benign</div></div>
+            <div class="summary-card suspicious"><div class="value">{{ bulk.suspicious_count }}</div><div class="label">Suspicious</div></div>
+            <div class="summary-card zeroday"><div class="value">{{ bulk.zero_day_count }}</div><div class="label">Zero-Day</div></div>
+            <div class="summary-card unknown"><div class="value">{{ bulk.unknown_count + bulk.failed_count }}</div><div class="label">Unknown/Failed</div></div>
+        </div>
+        
+        <!-- Charts -->
+        <div class="chart-row">
+            <div class="chart-card">
+                <h3><i class="fas fa-chart-pie" style="color: #4cc9f0;"></i> Classification Breakdown</h3>
+                <div class="chart-wrapper"><canvas id="bulkPie"></canvas></div>
+            </div>
+            <div class="chart-card">
+                <h3><i class="fas fa-chart-bar" style="color: #f59e0b;"></i> IOC Type Distribution</h3>
+                <div class="chart-wrapper"><canvas id="typeBar"></canvas></div>
+            </div>
+        </div>
+        
+        <!-- Results Table -->
+        <div class="results-table-container">
+            <h3><i class="fas fa-table" style="color: #4cc9f0;"></i> All Scanned IOCs</h3>
+            
+            <div class="filter-bar">
+                <button class="filter-btn active" onclick="filterResults('all', this)">All ({{ results|length }})</button>
+                <button class="filter-btn" onclick="filterResults('malicious', this)">Malicious ({{ bulk.malicious_count }})</button>
+                <button class="filter-btn" onclick="filterResults('benign', this)">Benign ({{ bulk.benign_count }})</button>
+                <button class="filter-btn" onclick="filterResults('suspicious', this)">Suspicious ({{ bulk.suspicious_count }})</button>
+            </div>
+            
+            <div style="overflow-x: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>IOC Value</th>
+                            <th>Type</th>
+                            <th>Classification</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultsBody">
+                        {% for r in results %}
+                        <tr data-cls="{{ r.classification|lower|replace(' ', '-') }}">
+                            <td>{{ loop.index }}</td>
+                            <td style="font-family: 'Consolas', monospace; max-width: 400px; overflow: hidden; text-overflow: ellipsis;">{{ r.input_value }}</td>
+                            <td><span style="color: #94a3b8; text-transform: uppercase; font-size: 0.8rem; font-weight: 600;">{{ r.type }}</span></td>
+                            <td><span class="cls-badge cls-{{ r.classification|lower|replace(' ', '-') }}">{{ r.classification }}</span></td>
+                            <td><a href="{{ url_for('main.results', ioc_id=r.id) }}" class="ioc-link"><i class="fas fa-external-link-alt"></i> Details</a></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div class="action-btns">
+            <a href="{{ url_for('bulk.bulk_scan_page') }}" class="action-btn btn-back"><i class="fas fa-arrow-left"></i> Back to Bulk Scanner</a>
+            <button class="action-btn btn-investigate" onclick="createInvestigationFromBulk()"><i class="fas fa-book-open"></i> Create Investigation from Results</button>
+        </div>
+    </div>
+    
+    <script>
+    // Charts
+    const bulkData = {{ bulk | tojson | safe }};
+    
+    new Chart(document.getElementById('bulkPie'), {
+        type: 'doughnut',
+        data: {
+            labels: ['Malicious', 'Benign', 'Suspicious', 'Zero-Day', 'Unknown'],
+            datasets: [{
+                data: [bulkData.malicious_count, bulkData.benign_count, bulkData.suspicious_count, bulkData.zero_day_count, bulkData.unknown_count],
+                backgroundColor: ['#e74c3ccc', '#2ecc71cc', '#f59e0bcc', '#7c3aedcc', '#64748bcc'],
+                borderColor: ['#e74c3c', '#2ecc71', '#f59e0b', '#7c3aed', '#64748b'],
+                borderWidth: 2, hoverOffset: 8
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false, cutout: '55%',
+            plugins: { legend: { position: 'bottom', labels: { color: '#e2e8f0', usePointStyle: true, padding: 12 } } }
+        }
+    });
+    
+    // Type distribution
+    const results = {{ results | tojson | safe }};
+    const typeCounts = {};
+    results.forEach(r => { typeCounts[r.type] = (typeCounts[r.type] || 0) + 1; });
+    
+    new Chart(document.getElementById('typeBar'), {
+        type: 'bar',
+        data: {
+            labels: Object.keys(typeCounts).map(t => t.toUpperCase()),
+            datasets: [{ data: Object.values(typeCounts), backgroundColor: '#4361eecc', borderColor: '#4361ee', borderWidth: 2, borderRadius: 8, borderSkipped: false }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { beginAtZero: true, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.08)' } },
+                x: { ticks: { color: '#e2e8f0', font: { weight: '600' } }, grid: { display: false } }
+            }
+        }
+    });
+    
+    // Filter
+    function filterResults(cls, btn) {
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.querySelectorAll('#resultsBody tr').forEach(tr => {
+            tr.style.display = (cls === 'all' || tr.dataset.cls.includes(cls)) ? '' : 'none';
+        });
+    }
+    
+    function createInvestigationFromBulk() {
+        const csrfToken = '{{ csrf_token() }}';
+        const malicious = results.filter(r => r.classification === 'Malicious' || r.classification === 'Suspicious' || r.classification === 'Potential Zero-Day');
+        
+        fetch('/api/investigations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({
+                title: 'Investigation: ' + bulkData.name,
+                description: `Auto-created from bulk scan. ${bulkData.malicious_count} malicious, ${bulkData.suspicious_count} suspicious IOCs detected.`,
+                severity: bulkData.malicious_count > 5 ? 'critical' : bulkData.malicious_count > 0 ? 'high' : 'medium',
+                tags: ['bulk-scan', 'auto-generated']
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.id) {
+                // Link malicious/suspicious scans
+                const promises = malicious.map(r =>
+                    fetch(`/api/investigation/${data.id}/link-scan`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                        body: JSON.stringify({ scan_id: r.id })
+                    })
+                );
+                Promise.all(promises).then(() => {
+                    window.location.href = '/investigation/' + data.id;
+                });
+            }
+        });
+    }
+    </script>
+</body>
+</html>

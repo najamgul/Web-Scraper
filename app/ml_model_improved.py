@@ -59,6 +59,26 @@ domain_scaler = _load_model("domain_scaler.pkl")
 hash_model = _load_model("hash_model.pkl")
 hash_scaler = _load_model("hash_scaler.pkl")
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# ZERO-DAY ANOMALY DETECTORS (Isolation Forest)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+zd_url_model = _load_model("zeroday_url.pkl")
+zd_url_scaler = _load_model("zeroday_url_scaler.pkl")
+
+zd_ip_model = _load_model("zeroday_ip.pkl")
+zd_ip_scaler = _load_model("zeroday_ip_scaler.pkl")
+
+zd_domain_model = _load_model("zeroday_domain.pkl")
+zd_domain_scaler = _load_model("zeroday_domain_scaler.pkl")
+
+zd_hash_model = _load_model("zeroday_hash.pkl")
+zd_hash_scaler = _load_model("zeroday_hash_scaler.pkl")
+
+zd_keyword_model = _load_model("zeroday_keyword.pkl")
+zd_keyword_scaler = _load_model("zeroday_keyword_scaler.pkl")
+zd_keyword_svd = _load_model("zeroday_keyword_svd.pkl")
+
 # Log what loaded
 _loaded = []
 if model and vectorizer: _loaded.append("keyword")
@@ -66,7 +86,16 @@ if url_model and url_scaler: _loaded.append("url")
 if ip_model and ip_scaler: _loaded.append("ip")
 if domain_model and domain_scaler: _loaded.append("domain")
 if hash_model and hash_scaler: _loaded.append("hash")
+
+_zd_loaded = []
+if zd_url_model: _zd_loaded.append("url")
+if zd_ip_model: _zd_loaded.append("ip")
+if zd_domain_model: _zd_loaded.append("domain")
+if zd_hash_model: _zd_loaded.append("hash")
+if zd_keyword_model: _zd_loaded.append("keyword")
+
 logger.info(f" Loaded ML models: {', '.join(_loaded) if _loaded else 'NONE'}")
+logger.info(f" Loaded Zero-Day detectors: {', '.join(_zd_loaded) if _zd_loaded else 'NONE'}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -431,7 +460,12 @@ def classify_threat_improved(vt_data=None, shodan_data=None, otx_data=None,
         'context_analysis': {},
         'final_classification': 'Unknown',
         'reasoning': [],
-        'confidence_threshold_met': False
+        'confidence_threshold_met': False,
+        'zero_day_analysis': {
+            'is_anomaly': False,
+            'anomaly_score': 0.0,
+            'is_potential_zero_day': False,
+        }
     }
     
     try:
@@ -572,6 +606,34 @@ def classify_threat_improved(vt_data=None, shodan_data=None, otx_data=None,
             features = extract_hash_api_features(vt_data, otx_data)
             logger.info(f" Using Hash ML model (9 API features)")
 
+        # ══════════════════════════════════════════════════════════════════
+        # ZERO-DAY ANOMALY CHECK (runs alongside classifier)
+        # ══════════════════════════════════════════════════════════════════
+        if features is not None:
+            zd_model_map = {
+                'url': (zd_url_model, zd_url_scaler),
+                'ip': (zd_ip_model, zd_ip_scaler),
+                'domain': (zd_domain_model, zd_domain_scaler),
+                'hash': (zd_hash_model, zd_hash_scaler),
+            }
+            zd_m, zd_s = zd_model_map.get(ioc_type, (None, None))
+            if zd_m is not None:
+                try:
+                    X_zd = np.array([features], dtype=np.float32)
+                    if zd_s is not None:
+                        X_zd = zd_s.transform(X_zd)
+                    anomaly_pred = zd_m.predict(X_zd)[0]  # 1=normal, -1=anomaly
+                    anomaly_score = zd_m.decision_function(X_zd)[0]  # lower = more anomalous
+                    is_anomaly = anomaly_pred == -1
+                    result_details['zero_day_analysis'] = {
+                        'is_anomaly': bool(is_anomaly),
+                        'anomaly_score': round(float(anomaly_score), 4),
+                        'is_potential_zero_day': False,  # set below after classifier runs
+                    }
+                    logger.info(f" Zero-Day Check: {'⚠️ ANOMALY' if is_anomaly else '✓ Normal'} (score: {anomaly_score:.4f})")
+                except Exception as e:
+                    logger.warning(f" Zero-day check error: {e}")
+
         # Run IOC-specific ML model if available
         if ioc_model is not None and features is not None:
             try:
@@ -634,6 +696,33 @@ def classify_threat_improved(vt_data=None, shodan_data=None, otx_data=None,
             classification = classify_by_weighted_score(weighted_score, False)
             result_details['final_classification'] = classification
             result_details['reasoning'].append(f"No {ioc_type} ML model, using weighted API score: {weighted_score:.1f}")
+
+        # ══════════════════════════════════════════════════════════════════
+        # ZERO-DAY DECISION: Anomaly + Low Confidence = Potential Zero-Day
+        # ══════════════════════════════════════════════════════════════════
+        zd = result_details.get('zero_day_analysis', {})
+        if zd.get('is_anomaly', False):
+            model_conf = result_details.get('model_confidence', 0)
+            # Zero-day conditions:
+            # 1. Isolation Forest flagged as anomaly (-1)
+            # 2. Classifier confidence is below threshold OR classification is uncertain
+            if model_conf < 0.75 or classification in ['Informational', 'Unknown']:
+                result_details['zero_day_analysis']['is_potential_zero_day'] = True
+                classification = 'Potential Zero-Day'
+                result_details['final_classification'] = classification
+                result_details['reasoning'].append(
+                    f"⚠️ ZERO-DAY: Anomaly detected (score: {zd.get('anomaly_score', 0):.4f}) "
+                    f"+ classifier uncertain ({model_conf:.2%}) → Potential unknown threat"
+                )
+                logger.info(f" ⚠️ POTENTIAL ZERO-DAY DETECTED!")
+            elif model_conf >= 0.75 and classification == 'Malicious':
+                # High confidence malicious + anomaly = possibly new variant
+                result_details['zero_day_analysis']['is_potential_zero_day'] = True
+                result_details['reasoning'].append(
+                    f"⚠️ ANOMALY: New malicious pattern detected (anomaly score: {zd.get('anomaly_score', 0):.4f}) "
+                    f"— possible new variant of known threat"
+                )
+                logger.info(f" ⚠️ Anomalous malicious pattern — possible new variant")
 
         # AbuseIPDB safety net for IPs
         if ioc_type == 'ip' and abuse_confidence and not abuse_whitelisted:

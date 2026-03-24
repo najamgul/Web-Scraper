@@ -57,7 +57,7 @@ except ImportError:
     logger.warning(" Falling back to legacy ML model")
 
 from app.forms import InputForm, LoginForm, SignupForm
-from app.models import User, IOCResult, Feedback
+from app.models import User, IOCResult, Feedback, BulkScan, Investigation, InvestigationNote
 from app.decorators import login_required
 
 from io import BytesIO
@@ -581,10 +581,12 @@ def index():
 
         # Chart Data
         chart_data = {
-            "labels": ["Malicious", "Benign", "Informational", "Unknown"],
+            "labels": ["Malicious", "Benign", "Suspicious", "Potential Zero-Day", "Informational", "Unknown"],
             "values": [
                 IOCResult.objects(classification="Malicious").count(),
                 IOCResult.objects(classification="Benign").count(),
+                IOCResult.objects(classification="Suspicious").count(),
+                IOCResult.objects(classification="Potential Zero-Day").count(),
                 IOCResult.objects(classification="Informational").count(),
                 IOCResult.objects(classification="Unknown").count(),
             ]
@@ -617,6 +619,51 @@ def index():
         return render_template("results.html", results=results, chart_data=json.dumps(chart_data))
     
     return render_template("index.html", form=form)
+
+
+# ---- VIEW SAVED RESULT BY ID ----
+@main_bp.route("/results/<ioc_id>")
+@login_required
+def results(ioc_id):
+    """View a saved scan result by its ID"""
+    try:
+        ioc_result = IOCResult.objects.get(id=ioc_id)
+        
+        # Build the results dict matching what results.html expects
+        vt_data = ioc_result.vt_report or {}
+        shodan_data = ioc_result.shodan_report or {}
+        otx_data = ioc_result.otx_report or {}
+        abuseipdb_data = ioc_result.abuseipdb_report or {}
+        
+        results_data = {
+            "ioc_id": str(ioc_result.id),
+            "input": ioc_result.input_value,
+            "type": ioc_result.type,
+            "classification": ioc_result.classification or "Unknown",
+            "vt": json.dumps(vt_data),
+            "shodan": shodan_data,
+            "abuseipdb": abuseipdb_data,
+            "otx": None,  # Loaded via AJAX
+            "google": format_google_for_display(ioc_result.scraped_data) if ioc_result.scraped_data else None,
+        }
+        
+        chart_data = {
+            "labels": ["Malicious", "Benign", "Suspicious", "Potential Zero-Day", "Informational", "Unknown"],
+            "values": [
+                IOCResult.objects(classification="Malicious").count(),
+                IOCResult.objects(classification="Benign").count(),
+                IOCResult.objects(classification="Suspicious").count(),
+                IOCResult.objects(classification="Potential Zero-Day").count(),
+                IOCResult.objects(classification="Informational").count(),
+                IOCResult.objects(classification="Unknown").count(),
+            ]
+        }
+        
+        return render_template("results.html", results=results_data, chart_data=json.dumps(chart_data))
+    except Exception as e:
+        logger.error(f"Error loading result {ioc_id}: {e}")
+        flash(f"Result not found: {e}", "danger")
+        return redirect(url_for("main.index"))
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -730,12 +777,13 @@ def scan_unified():
         
         # Chart data for dashboard
         chart_data = {
-            "labels": ["Malicious", "Benign", "Informational", "Suspicious", "Unknown"],
+            "labels": ["Malicious", "Benign", "Suspicious", "Potential Zero-Day", "Informational", "Unknown"],
             "values": [
                 IOCResult.objects(classification="Malicious").count(),
                 IOCResult.objects(classification="Benign").count(),
-                IOCResult.objects(classification="Informational").count(),
                 IOCResult.objects(classification="Suspicious").count(),
+                IOCResult.objects(classification="Potential Zero-Day").count(),
+                IOCResult.objects(classification="Informational").count(),
                 IOCResult.objects(classification="Unknown").count(),
             ]
         }
@@ -864,9 +912,14 @@ def get_classification(ioc_id):
         # Check if classification already exists
         if ioc_result.classification and ioc_result.classification not in [None, 'Unknown', 'Loading...', 'Pending']:
             logger.info(f" Returning cached classification for {ioc_id}: {ioc_result.classification}")
+            cached_details = (ioc_result.enrichment_context or {}).get('classification_details', {})
             return jsonify({
                 'status': 'complete',
-                'classification': ioc_result.classification
+                'classification': ioc_result.classification,
+                'zero_day_analysis': cached_details.get('zero_day_analysis', {}),
+                'model_confidence': cached_details.get('model_confidence', 0),
+                'reasoning': cached_details.get('reasoning', []),
+                'api_scores': cached_details.get('api_scores', {}),
             })
         
         # Run classification now
@@ -884,6 +937,7 @@ def get_classification(ioc_id):
             google_formatted = format_google_for_display(ioc_result.scraped_data)
         
         # Run classification with detailed logging
+        details = {}
         if classify_threat_with_details:
             classification, details = classify_threat_with_details(
                 vt_data=vt_data,
@@ -959,7 +1013,11 @@ def get_classification(ioc_id):
         
         return jsonify({
             'status': 'complete',
-            'classification': classification
+            'classification': classification,
+            'zero_day_analysis': details.get('zero_day_analysis', {}) if details else {},
+            'model_confidence': details.get('model_confidence', 0) if details else 0,
+            'reasoning': details.get('reasoning', []) if details else [],
+            'api_scores': details.get('api_scores', {}) if details else {},
         })
     
     except Exception as e:
@@ -1828,12 +1886,62 @@ def export(format, ioc_id):
             spaceAfter=20
         )
         
-        # Title
-        story.append(Paragraph(" THREAT INTELLIGENCE REPORT", title_style))
-        story.append(Paragraph(f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}", subtitle_style))
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # COVER PAGE
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        story.append(Spacer(1, 1.5*inch))
+        story.append(Paragraph("THREAT INTELLIGENCE REPORT", title_style))
         story.append(Spacer(1, 0.2*inch))
+        story.append(Paragraph(f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}", subtitle_style))
+        story.append(Spacer(1, 0.3*inch))
         
-        # IOC Summary Table
+        # Classification Verdict Banner
+        cls = result.classification or "Unknown"
+        if cls == "Malicious":
+            verdict_color = colors.HexColor('#e74c3c')
+            verdict_bg = colors.HexColor('#fde8e8')
+        elif cls == "Benign":
+            verdict_color = colors.HexColor('#27ae60')
+            verdict_bg = colors.HexColor('#e8fde8')
+        elif cls == "Suspicious":
+            verdict_color = colors.HexColor('#f39c12')
+            verdict_bg = colors.HexColor('#fef9e7')
+        elif "Zero" in cls:
+            verdict_color = colors.HexColor('#7c3aed')
+            verdict_bg = colors.HexColor('#f3e8ff')
+        else:
+            verdict_color = colors.HexColor('#6b7280')
+            verdict_bg = colors.HexColor('#f3f4f6')
+        
+        verdict_data = [
+            [Paragraph(f'<font color="white" size="14"><b>VERDICT: {cls.upper()}</b></font>', styles['Normal'])],
+            [Paragraph(f'<font size="11">IOC: {result.input_value}</font>', styles['Normal'])],
+            [Paragraph(f'<font size="10" color="#666666">Type: {result.type.upper()} &nbsp;|&nbsp; Risk Score: {enrichment.get("risk_score", 0)}/100 &nbsp;|&nbsp; Confidence: {enrichment.get("confidence", "Unknown")}</font>', styles['Normal'])]
+        ]
+        verdict_table = Table(verdict_data, colWidths=[6.5*inch])
+        verdict_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), verdict_color),
+            ('BACKGROUND', (0, 1), (-1, -1), verdict_bg),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('TOPPADDING', (0, 0), (-1, -1), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+            ('LEFTPADDING', (0, 0), (-1, -1), 20),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 20),
+            ('BOX', (0, 0), (-1, -1), 2, verdict_color),
+        ]))
+        story.append(verdict_table)
+        story.append(Spacer(1, 0.5*inch))
+        
+        # Executive Summary
+        story.append(Paragraph("EXECUTIVE SUMMARY", section_style))
+        exec_summary = enrichment.get('summary', 'AI analysis not available for this IOC.')
+        exec_style = ParagraphStyle('ExecSummary', parent=styles['Normal'], fontSize=11, leading=18, spaceAfter=12, leftIndent=10, rightIndent=10, backColor=colors.HexColor('#f0f8ff'), borderPadding=10)
+        story.append(Paragraph(exec_summary, exec_style))
+        story.append(Spacer(1, 0.3*inch))
+        
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # IOC DETAILS TABLE
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         story.append(Paragraph("INDICATOR OF COMPROMISE", section_style))
         
         ioc_data = [
@@ -1842,7 +1950,9 @@ def export(format, ioc_id):
             ['Type', result.type],
             ['Classification', result.classification],
             ['Risk Score', f"{enrichment.get('risk_score', 0)}/100"],
-            ['Scan Date', result.timestamp.strftime("%Y-%m-%d %H:%M:%S") if result.timestamp else "N/A"]
+            ['ML Confidence', enrichment.get('confidence', 'Unknown')],
+            ['Scan Date', result.timestamp.strftime("%Y-%m-%d %H:%M:%S") if result.timestamp else "N/A"],
+            ['Report ID', str(result.id)],
         ]
         
         ioc_table = Table(ioc_data, colWidths=[2*inch, 4.5*inch])
@@ -2165,9 +2275,22 @@ def export(format, ioc_id):
             textColor=colors.grey,
             alignment=1
         )
+        disclaimer_style = ParagraphStyle(
+            'Disclaimer',
+            parent=styles['Normal'],
+            fontSize=7,
+            textColor=colors.HexColor('#999999'),
+            alignment=1,
+            leading=10,
+            spaceAfter=4
+        )
         story.append(Paragraph("━" * 100, footer_style))
-        story.append(Paragraph("This report was generated automatically by the Threat Intelligence Scanner", footer_style))
-        story.append(Paragraph(f"Report ID: {str(result.id)}", footer_style))
+        story.append(Spacer(1, 0.1*inch))
+        story.append(Paragraph(f"<b>CLASSIFICATION: {(result.classification or 'Unknown').upper()}</b> &nbsp;|&nbsp; Report ID: {str(result.id)}", footer_style))
+        story.append(Paragraph(f"Generated by Threat Intelligence Platform &nbsp;|&nbsp; {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC", footer_style))
+        story.append(Spacer(1, 0.08*inch))
+        story.append(Paragraph("CONFIDENTIAL — This report contains threat intelligence data intended for authorized security personnel only.", disclaimer_style))
+        story.append(Paragraph("The classifications and risk scores are generated using ML models and multi-source API correlation. Always validate findings before taking action.", disclaimer_style))
         
         # Build PDF
         doc.build(story)

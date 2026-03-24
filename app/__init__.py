@@ -51,6 +51,8 @@ def create_app():
     from app.routes import main_bp
     app.register_blueprint(main_bp)
     
+    from app.bulk_investigation_routes import bulk_bp
+    app.register_blueprint(bulk_bp)
+    csrf.exempt(bulk_bp)  # JSON API routes use login_required for auth
     
-
     return app

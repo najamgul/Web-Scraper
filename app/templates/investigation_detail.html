@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Investigation: {{ inv.title }} - Threat Intelligence Platform</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='responsive.css') }}">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); min-height: 100vh; color: #e2e8f0; }
+        
+        .navbar { background: rgba(30, 41, 59, 0.95); padding: 1rem 2rem; box-shadow: 0 4px 15px rgba(0,0,0,0.3); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
+        .navbar-brand { font-size: 1.5rem; font-weight: 700; background: linear-gradient(135deg, #4361ee, #4cc9f0); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; display: flex; align-items: center; gap: 0.8rem; }
+        .navbar-links { display: flex; gap: 1rem; }
+        .navbar-links a { padding: 0.6rem 1.2rem; border-radius: 999px; background: rgba(76, 201, 240, 0.12); color: #cbd5e1; text-decoration: none; font-weight: 600; transition: all 0.3s; display: flex; align-items: center; gap: 0.5rem; }
+        .navbar-links a:hover { background: rgba(76, 201, 240, 0.25); color: #4cc9f0; }
+        
+        .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+        
+        /* Back link */
+        .back-link { display: inline-flex; align-items: center; gap: 0.5rem; color: #4cc9f0; text-decoration: none; font-weight: 600; margin-bottom: 1.5rem; transition: transform 0.3s; }
+        .back-link:hover { transform: translateX(-5px); }
+        
+        /* Header */
+        .inv-header-card { background: rgba(30, 41, 59, 0.8); backdrop-filter: blur(10px); border-radius: 20px; padding: 2.5rem; border: 1px solid rgba(255,255,255,0.08); margin-bottom: 2rem; position: relative; overflow: hidden; }
+        .inv-header-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; }
+        .inv-header-card.sev-low::before { background: linear-gradient(90deg, #3498db, #4cc9f0); }
+        .inv-header-card.sev-medium::before { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+        .inv-header-card.sev-high::before { background: linear-gradient(90deg, #e74c3c, #ef4444); }
+        .inv-header-card.sev-critical::before { background: linear-gradient(90deg, #7c3aed, #e74c3c); }
+        
+        .inv-title { font-size: 2rem; font-weight: 800; margin-bottom: 0.8rem; }
+        .inv-desc { color: #94a3b8; font-size: 1.05rem; line-height: 1.6; margin-bottom: 1.5rem; }
+        
+        .inv-controls { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; }
+        .control-group { display: flex; align-items: center; gap: 0.5rem; }
+        .control-group label { font-size: 0.85rem; font-weight: 600; color: #94a3b8; }
+        .control-group select { padding: 0.5rem 1rem; border-radius: 10px; border: 1px solid rgba(255,255,255,0.15); background: rgba(15, 23, 42, 0.8); color: #e2e8f0; font-weight: 600; cursor: pointer; }
+        .control-group select:focus { outline: none; border-color: #4361ee; }
+        
+        .inv-tags-display { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1rem; }
+        .tag { padding: 0.3rem 0.8rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600; background: rgba(76, 201, 240, 0.1); color: #4cc9f0; border: 1px solid rgba(76, 201, 240, 0.2); }
+        
+        .btn-delete { padding: 0.5rem 1rem; border-radius: 10px; border: 1px solid rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.1); color: #ef4444; cursor: pointer; font-weight: 600; transition: all 0.3s; font-size: 0.85rem; }
+        .btn-delete:hover { background: rgba(239, 68, 68, 0.2); }
+        
+        /* Two Column Layout */
+        .content-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+        
+        /* Linked Scans */
+        .section-card { background: rgba(30, 41, 59, 0.8); backdrop-filter: blur(10px); border-radius: 16px; padding: 2rem; border: 1px solid rgba(255,255,255,0.08); }
+        .section-card h3 { font-size: 1.3rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.6rem; }
+        
+        .scan-item { background: rgba(15, 23, 42, 0.5); border-radius: 12px; padding: 1.2rem; margin-bottom: 0.8rem; display: flex; justify-content: space-between; align-items: center; border-left: 3px solid #4361ee; transition: all 0.3s; }
+        .scan-item:hover { background: rgba(15, 23, 42, 0.8); }
+        .scan-item.malicious { border-left-color: #e74c3c; }
+        .scan-item.benign { border-left-color: #2ecc71; }
+        .scan-item.suspicious { border-left-color: #f59e0b; }
+        
+        .scan-info { flex: 1; }
+        .scan-ioc { font-family: 'Consolas', monospace; font-size: 0.95rem; font-weight: 600; }
+        .scan-meta { font-size: 0.8rem; color: #64748b; margin-top: 0.3rem; }
+        .scan-actions { display: flex; gap: 0.5rem; align-items: center; }
+        
+        .cls-badge { padding: 0.25rem 0.7rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; }
+        .cls-malicious { background: rgba(231,76,60,0.15); color: #e74c3c; }
+        .cls-benign { background: rgba(46,204,113,0.15); color: #2ecc71; }
+        .cls-suspicious { background: rgba(245,158,11,0.15); color: #f59e0b; }
+        
+        .btn-icon { width: 32px; height: 32px; border-radius: 8px; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.3s; font-size: 0.85rem; }
+        .btn-view { background: rgba(76, 201, 240, 0.15); color: #4cc9f0; }
+        .btn-view:hover { background: rgba(76, 201, 240, 0.3); }
+        .btn-unlink { background: rgba(239, 68, 68, 0.1); color: #64748b; }
+        .btn-unlink:hover { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+        
+        .link-scan-form { display: flex; gap: 0.5rem; margin-top: 1rem; }
+        .link-scan-form select { flex: 1; padding: 0.7rem; border-radius: 10px; border: 1px solid rgba(255,255,255,0.15); background: rgba(15, 23, 42, 0.8); color: #e2e8f0; }
+        .btn-link { padding: 0.7rem 1.2rem; border-radius: 10px; border: none; background: #4361ee; color: white; font-weight: 600; cursor: pointer; transition: all 0.3s; }
+        .btn-link:hover { background: #3b4dce; }
+        
+        /* Notes Section */
+        .note-item { background: rgba(15, 23, 42, 0.5); border-radius: 12px; padding: 1.2rem; margin-bottom: 0.8rem; border-left: 3px solid #7c3aed; }
+        .note-content { font-size: 0.95rem; line-height: 1.6; white-space: pre-wrap; }
+        .note-meta { font-size: 0.8rem; color: #64748b; margin-top: 0.5rem; display: flex; gap: 1rem; }
+        
+        .note-form { margin-top: 1rem; }
+        .note-textarea { width: 100%; min-height: 100px; padding: 1rem; border-radius: 12px; border: 1px solid rgba(255,255,255,0.15); background: rgba(15, 23, 42, 0.8); color: #e2e8f0; font-size: 0.95rem; resize: vertical; }
+        .note-textarea:focus { outline: none; border-color: #7c3aed; }
+        .btn-note { margin-top: 0.8rem; padding: 0.7rem 1.5rem; border-radius: 10px; border: none; background: linear-gradient(135deg, #7c3aed, #a78bfa); color: white; font-weight: 600; cursor: pointer; transition: all 0.3s; }
+        .btn-note:hover { transform: translateY(-2px); }
+        
+        .empty-section { text-align: center; padding: 2rem; color: #64748b; font-style: italic; }
+        
+        @media (max-width: 768px) {
+            .content-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-brand"><i class="fas fa-shield-alt"></i> ThreatIntel</div>
+        <div class="navbar-links">
+            <a href="{{ url_for('main.index') }}"><i class="fas fa-search"></i> Scanner</a>
+            <a href="{{ url_for('bulk.bulk_scan_page') }}"><i class="fas fa-layer-group"></i> Bulk</a>
+            <a href="{{ url_for('bulk.investigations_list') }}"><i class="fas fa-book"></i> Investigations</a>
+            <a href="{{ url_for('main.dashboard') }}"><i class="fas fa-chart-line"></i> Dashboard</a>
+        </div>
+    </nav>
+    
+    <div class="container">
+        <a href="{{ url_for('bulk.investigations_list') }}" class="back-link"><i class="fas fa-arrow-left"></i> Back to Investigations</a>
+        
+        <!-- Header Card -->
+        <div class="inv-header-card sev-{{ inv.severity }}">
+            <div class="inv-title">{{ inv.title }}</div>
+            {% if inv.description %}
+            <div class="inv-desc">{{ inv.description }}</div>
+            {% endif %}
+            
+            <div class="inv-controls">
+                <div class="control-group">
+                    <label>Status:</label>
+                    <select id="statusSelect" onchange="updateStatus()">
+                        <option value="open" {{ 'selected' if inv.status == 'open' }}>🔵 Open</option>
+                        <option value="in_progress" {{ 'selected' if inv.status == 'in_progress' }}>🟡 In Progress</option>
+                        <option value="resolved" {{ 'selected' if inv.status == 'resolved' }}>🟢 Resolved</option>
+                        <option value="closed" {{ 'selected' if inv.status == 'closed' }}>⚪ Closed</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>Severity:</label>
+                    <select id="severitySelect" onchange="updateStatus()">
+                        <option value="low" {{ 'selected' if inv.severity == 'low' }}>Low</option>
+                        <option value="medium" {{ 'selected' if inv.severity == 'medium' }}>Medium</option>
+                        <option value="high" {{ 'selected' if inv.severity == 'high' }}>High</option>
+                        <option value="critical" {{ 'selected' if inv.severity == 'critical' }}>Critical</option>
+                    </select>
+                </div>
+                <button class="btn-delete" onclick="deleteInvestigation()"><i class="fas fa-trash-alt"></i> Delete</button>
+            </div>
+            
+            {% if inv.tags %}
+            <div class="inv-tags-display">
+                {% for tag in inv.tags %}
+                <span class="tag">{{ tag }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        
+        <!-- Two Column: Linked Scans + Notes -->
+        <div class="content-grid">
+            
+            <!-- Linked Scans -->
+            <div class="section-card">
+                <h3><i class="fas fa-link" style="color: #4cc9f0;"></i> Linked Scans ({{ linked_scans | length }})</h3>
+                
+                <div id="linkedScans">
+                    {% if linked_scans %}
+                        {% for scan in linked_scans %}
+                        <div class="scan-item {{ scan.classification | lower }}" id="scan-{{ scan.id }}">
+                            <div class="scan-info">
+                                <div class="scan-ioc">{{ scan.input_value[:60] }}{% if scan.input_value|length > 60 %}...{% endif %}</div>
+                                <div class="scan-meta">{{ scan.type | upper }} • {{ scan.timestamp[:10] if scan.timestamp else 'N/A' }}</div>
+                            </div>
+                            <div class="scan-actions">
+                                <span class="cls-badge cls-{{ scan.classification | lower }}">{{ scan.classification }}</span>
+                                <a href="{{ url_for('main.results', ioc_id=scan.id) }}" class="btn-icon btn-view" title="View Details"><i class="fas fa-external-link-alt"></i></a>
+                                <button class="btn-icon btn-unlink" title="Unlink" onclick="unlinkScan('{{ scan.id }}')"><i class="fas fa-times"></i></button>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="empty-section"><i class="fas fa-link" style="font-size: 1.5rem; margin-bottom: 0.5rem; display: block;"></i> No scans linked yet</div>
+                    {% endif %}
+                </div>
+                
+                <div class="link-scan-form">
+                    <select id="scanSelect">
+                        <option value="">— Select a scan to link —</option>
+                        {% for scan in recent_scans %}
+                        <option value="{{ scan.id }}">{{ scan.input_value[:40] }} ({{ scan.classification }})</option>
+                        {% endfor %}
+                    </select>
+                    <button class="btn-link" onclick="linkScan()"><i class="fas fa-plus"></i> Link</button>
+                </div>
+            </div>
+            
+            <!-- Notes -->
+            <div class="section-card">
+                <h3><i class="fas fa-sticky-note" style="color: #7c3aed;"></i> Analyst Notes ({{ inv.notes | length }})</h3>
+                
+                <div id="notesList">
+                    {% if inv.notes %}
+                        {% for note in inv.notes | reverse %}
+                        <div class="note-item">
+                            <div class="note-content">{{ note.content }}</div>
+                            <div class="note-meta">
+                                <span><i class="fas fa-user"></i> {{ note.author }}</span>
+                                <span><i class="fas fa-clock"></i> {{ note.created_at[:16] if note.created_at else 'N/A' }}</span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="empty-section" id="emptyNotes"><i class="fas fa-sticky-note" style="font-size: 1.5rem; margin-bottom: 0.5rem; display: block;"></i> No notes yet</div>
+                    {% endif %}
+                </div>
+                
+                <div class="note-form">
+                    <textarea class="note-textarea" id="noteContent" placeholder="Add an analyst note... (findings, observations, actions taken)"></textarea>
+                    <button class="btn-note" onclick="addNote()"><i class="fas fa-plus"></i> Add Note</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+    const invId = '{{ inv.id }}';
+    const csrfToken = '{{ csrf_token() }}';
+    
+    function updateStatus() {
+        fetch(`/api/investigation/${invId}/status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({
+                status: document.getElementById('statusSelect').value,
+                severity: document.getElementById('severitySelect').value
+            })
+        }).then(r => r.json()).then(() => {
+            // Update header color
+            const card = document.querySelector('.inv-header-card');
+            card.className = 'inv-header-card sev-' + document.getElementById('severitySelect').value;
+        });
+    }
+    
+    function linkScan() {
+        const scanId = document.getElementById('scanSelect').value;
+        if (!scanId) { alert('Select a scan first'); return; }
+        
+        fetch(`/api/investigation/${invId}/link-scan`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({ scan_id: scanId })
+        }).then(r => r.json()).then(() => location.reload());
+    }
+    
+    function unlinkScan(scanId) {
+        if (!confirm('Unlink this scan?')) return;
+        fetch(`/api/investigation/${invId}/unlink-scan`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({ scan_id: scanId })
+        }).then(r => r.json()).then(() => {
+            document.getElementById('scan-' + scanId).remove();
+        });
+    }
+    
+    function addNote() {
+        const content = document.getElementById('noteContent').value.trim();
+        if (!content) { alert('Enter a note'); return; }
+        
+        fetch(`/api/investigation/${invId}/note`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({ content: content })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'added') {
+                const empty = document.getElementById('emptyNotes');
+                if (empty) empty.remove();
+                
+                const noteHtml = `
+                <div class="note-item" style="animation: fadeIn 0.4s ease;">
+                    <div class="note-content">${data.note.content}</div>
+                    <div class="note-meta">
+                        <span><i class="fas fa-user"></i> ${data.note.author}</span>
+                        <span><i class="fas fa-clock"></i> Just now</span>
+                    </div>
+                </div>`;
+                document.getElementById('notesList').insertAdjacentHTML('afterbegin', noteHtml);
+                document.getElementById('noteContent').value = '';
+            }
+        });
+    }
+    
+    function deleteInvestigation() {
+        if (!confirm('Delete this investigation permanently?')) return;
+        fetch(`/api/investigation/${invId}`, {
+            method: 'DELETE',
+            headers: { 'X-CSRFToken': csrfToken }
+        }).then(r => r.json()).then(() => {
+            window.location.href = '{{ url_for("bulk.investigations_list") }}';
+        });
+    }
+    </script>
+</body>
+</html>

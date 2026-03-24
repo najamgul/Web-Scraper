@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Investigations - Threat Intelligence Platform</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='responsive.css') }}">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); min-height: 100vh; color: #e2e8f0; }
+        
+        .navbar { background: rgba(30, 41, 59, 0.95); padding: 1rem 2rem; box-shadow: 0 4px 15px rgba(0,0,0,0.3); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
+        .navbar-brand { font-size: 1.5rem; font-weight: 700; background: linear-gradient(135deg, #4361ee, #4cc9f0); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; display: flex; align-items: center; gap: 0.8rem; }
+        .navbar-links { display: flex; gap: 1rem; }
+        .navbar-links a { padding: 0.6rem 1.2rem; border-radius: 999px; background: rgba(76, 201, 240, 0.12); color: #cbd5e1; text-decoration: none; font-weight: 600; transition: all 0.3s; display: flex; align-items: center; gap: 0.5rem; }
+        .navbar-links a:hover { background: rgba(76, 201, 240, 0.25); color: #4cc9f0; }
+        .navbar-links a.active { background: rgba(67, 97, 238, 0.3); color: #4cc9f0; border: 1px solid rgba(67, 97, 238, 0.5); }
+        
+        .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+        .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2.5rem; flex-wrap: wrap; gap: 1rem; }
+        h1 { font-size: 2.5rem; font-weight: 800; background: linear-gradient(135deg, #4361ee, #4cc9f0); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+        
+        .btn-new { padding: 0.9rem 2rem; border-radius: 12px; border: none; background: linear-gradient(135deg, #7c3aed, #a78bfa); color: white; font-size: 1rem; font-weight: 700; cursor: pointer; transition: all 0.3s; display: flex; align-items: center; gap: 0.6rem; box-shadow: 0 10px 25px rgba(124, 58, 237, 0.3); }
+        .btn-new:hover { transform: translateY(-3px); box-shadow: 0 15px 30px rgba(124, 58, 237, 0.4); }
+        
+        /* Stats Bar */
+        .stats-bar { display: flex; gap: 1.5rem; margin-bottom: 2.5rem; flex-wrap: wrap; }
+        .stat-pill { padding: 0.5rem 1.2rem; border-radius: 999px; font-weight: 700; font-size: 0.9rem; display: flex; align-items: center; gap: 0.5rem; }
+        .stat-pill.open { background: rgba(67, 97, 238, 0.15); color: #4361ee; border: 1px solid rgba(67, 97, 238, 0.3); }
+        .stat-pill.in-progress { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
+        .stat-pill.resolved { background: rgba(46, 204, 113, 0.15); color: #2ecc71; border: 1px solid rgba(46, 204, 113, 0.3); }
+        .stat-pill.closed { background: rgba(100, 116, 139, 0.15); color: #94a3b8; border: 1px solid rgba(100, 116, 139, 0.3); }
+        
+        /* Investigation Cards */
+        .inv-grid { display: grid; gap: 1.5rem; }
+        .inv-card { background: rgba(30, 41, 59, 0.8); backdrop-filter: blur(10px); border-radius: 16px; padding: 2rem; border: 1px solid rgba(255,255,255,0.08); transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); position: relative; overflow: hidden; text-decoration: none; color: inherit; display: block; }
+        .inv-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; transition: opacity 0.4s; opacity: 0; }
+        .inv-card:hover { transform: translateY(-4px); box-shadow: 0 20px 40px rgba(0,0,0,0.3); border-color: rgba(67, 97, 238, 0.3); }
+        .inv-card:hover::before { opacity: 1; }
+        .inv-card.severity-low::before { background: linear-gradient(90deg, #3498db, #4cc9f0); }
+        .inv-card.severity-medium::before { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+        .inv-card.severity-high::before { background: linear-gradient(90deg, #e74c3c, #ef4444); }
+        .inv-card.severity-critical::before { background: linear-gradient(90deg, #7c3aed, #e74c3c); }
+        
+        .inv-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; gap: 1rem; }
+        .inv-title { font-size: 1.3rem; font-weight: 700; }
+        .inv-meta { display: flex; gap: 0.8rem; flex-wrap: wrap; align-items: center; }
+        
+        .status-badge { padding: 0.3rem 0.9rem; border-radius: 999px; font-size: 0.8rem; font-weight: 700; text-transform: capitalize; }
+        .status-open { background: rgba(67, 97, 238, 0.15); color: #4361ee; border: 1px solid rgba(67, 97, 238, 0.3); }
+        .status-in_progress { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
+        .status-resolved { background: rgba(46, 204, 113, 0.15); color: #2ecc71; border: 1px solid rgba(46, 204, 113, 0.3); }
+        .status-closed { background: rgba(100, 116, 139, 0.15); color: #94a3b8; border: 1px solid rgba(100, 116, 139, 0.3); }
+        
+        .severity-badge { padding: 0.3rem 0.9rem; border-radius: 999px; font-size: 0.8rem; font-weight: 700; text-transform: capitalize; }
+        .sev-low { background: rgba(52, 152, 219, 0.15); color: #3498db; }
+        .sev-medium { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
+        .sev-high { background: rgba(231, 76, 60, 0.15); color: #e74c3c; }
+        .sev-critical { background: rgba(124, 58, 237, 0.15); color: #a78bfa; }
+        
+        .inv-desc { color: #94a3b8; font-size: 0.95rem; line-height: 1.5; margin-bottom: 1rem; }
+        .inv-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.8rem; }
+        .inv-tags { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+        .tag { padding: 0.2rem 0.7rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; background: rgba(76, 201, 240, 0.1); color: #4cc9f0; border: 1px solid rgba(76, 201, 240, 0.2); }
+        .inv-stats { display: flex; gap: 1.2rem; color: #64748b; font-size: 0.85rem; }
+        .inv-stats span { display: flex; align-items: center; gap: 0.4rem; }
+        
+        .empty-state { text-align: center; padding: 5rem 2rem; }
+        .empty-state i { font-size: 4rem; color: #334155; margin-bottom: 1.5rem; }
+        .empty-state h3 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+        .empty-state p { color: #94a3b8; }
+        
+        /* Modal */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center; }
+        .modal-overlay.active { display: flex; }
+        .modal { background: #1e293b; border-radius: 20px; padding: 2.5rem; max-width: 550px; width: 90%; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 30px 60px rgba(0,0,0,0.5); }
+        .modal h2 { font-size: 1.5rem; margin-bottom: 1.5rem; color: #e2e8f0; }
+        .modal .form-group { margin-bottom: 1.2rem; }
+        .modal label { display: block; font-weight: 600; margin-bottom: 0.4rem; color: #94a3b8; font-size: 0.9rem; }
+        .modal input, .modal textarea, .modal select { width: 100%; padding: 0.8rem 1rem; border-radius: 10px; border: 1px solid rgba(255,255,255,0.15); background: rgba(15, 23, 42, 0.8); color: #e2e8f0; font-size: 0.95rem; }
+        .modal textarea { resize: vertical; min-height: 80px; }
+        .modal input:focus, .modal textarea:focus, .modal select:focus { outline: none; border-color: #4361ee; }
+        .modal-actions { display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem; }
+        .btn-cancel { padding: 0.7rem 1.5rem; border-radius: 10px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: #94a3b8; cursor: pointer; font-weight: 600; }
+        .btn-create { padding: 0.7rem 1.5rem; border-radius: 10px; border: none; background: linear-gradient(135deg, #7c3aed, #a78bfa); color: white; cursor: pointer; font-weight: 600; }
+        
+        @media (max-width: 768px) {
+            .page-header { flex-direction: column; align-items: flex-start; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-brand"><i class="fas fa-shield-alt"></i> ThreatIntel</div>
+        <div class="navbar-links">
+            <a href="{{ url_for('main.index') }}"><i class="fas fa-search"></i> Scanner</a>
+            <a href="{{ url_for('bulk.bulk_scan_page') }}"><i class="fas fa-layer-group"></i> Bulk Scan</a>
+            <a href="{{ url_for('bulk.investigations_list') }}" class="active"><i class="fas fa-book"></i> Investigations</a>
+            <a href="{{ url_for('main.dashboard') }}"><i class="fas fa-chart-line"></i> Dashboard</a>
+            <a href="{{ url_for('main.history') }}"><i class="fas fa-history"></i> History</a>
+        </div>
+    </nav>
+    
+    <div class="container">
+        <div class="page-header">
+            <div>
+                <h1><i class="fas fa-book-open"></i> Investigations</h1>
+                <p style="color: #94a3b8; margin-top: 0.3rem;">Manage threat investigations and case notes</p>
+            </div>
+            <button class="btn-new" onclick="openModal()">
+                <i class="fas fa-plus"></i> New Investigation
+            </button>
+        </div>
+        
+        {% set open_count = investigations | selectattr('status', 'equalto', 'open') | list | length %}
+        {% set ip_count = investigations | selectattr('status', 'equalto', 'in_progress') | list | length %}
+        {% set resolved_count = investigations | selectattr('status', 'equalto', 'resolved') | list | length %}
+        {% set closed_count = investigations | selectattr('status', 'equalto', 'closed') | list | length %}
+        
+        <div class="stats-bar">
+            <div class="stat-pill open"><i class="fas fa-folder-open"></i> {{ open_count }} Open</div>
+            <div class="stat-pill in-progress"><i class="fas fa-spinner"></i> {{ ip_count }} In Progress</div>
+            <div class="stat-pill resolved"><i class="fas fa-check-circle"></i> {{ resolved_count }} Resolved</div>
+            <div class="stat-pill closed"><i class="fas fa-archive"></i> {{ closed_count }} Closed</div>
+        </div>
+        
+        {% if investigations | length > 0 %}
+        <div class="inv-grid">
+            {% for inv in investigations %}
+            <a href="{{ url_for('bulk.investigation_detail', inv_id=inv.id) }}" class="inv-card severity-{{ inv.severity }}">
+                <div class="inv-header">
+                    <div class="inv-title">{{ inv.title }}</div>
+                    <div class="inv-meta">
+                        <span class="severity-badge sev-{{ inv.severity }}"><i class="fas fa-flag"></i> {{ inv.severity | capitalize }}</span>
+                        <span class="status-badge status-{{ inv.status }}">{{ inv.status | replace('_', ' ') | capitalize }}</span>
+                    </div>
+                </div>
+                {% if inv.description %}
+                <div class="inv-desc">{{ inv.description[:150] }}{% if inv.description|length > 150 %}...{% endif %}</div>
+                {% endif %}
+                <div class="inv-footer">
+                    <div class="inv-tags">
+                        {% for tag in inv.tags[:5] %}
+                        <span class="tag">{{ tag }}</span>
+                        {% endfor %}
+                    </div>
+                    <div class="inv-stats">
+                        <span><i class="fas fa-link"></i> {{ inv.linked_scan_ids | length }} scans</span>
+                        <span><i class="fas fa-sticky-note"></i> {{ inv.notes | length }} notes</span>
+                        <span><i class="fas fa-clock"></i> {{ inv.updated_at.strftime('%b %d') if inv.updated_at else 'N/A' }}</span>
+                    </div>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <i class="fas fa-book"></i>
+            <h3>No Investigations Yet</h3>
+            <p>Create your first investigation to start tracking threats and gathering evidence.</p>
+        </div>
+        {% endif %}
+    </div>
+    
+    <!-- Create Investigation Modal -->
+    <div class="modal-overlay" id="createModal">
+        <div class="modal">
+            <h2><i class="fas fa-plus-circle" style="color: #7c3aed;"></i> New Investigation</h2>
+            <div class="form-group">
+                <label>Title *</label>
+                <input type="text" id="invTitle" placeholder="e.g., Phishing Campaign March 2026">
+            </div>
+            <div class="form-group">
+                <label>Description</label>
+                <textarea id="invDesc" placeholder="Describe the investigation scope and objectives..."></textarea>
+            </div>
+            <div class="form-group">
+                <label>Severity</label>
+                <select id="invSeverity">
+                    <option value="low">Low</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="high">High</option>
+                    <option value="critical">Critical</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Tags (comma-separated)</label>
+                <input type="text" id="invTags" placeholder="phishing, campaign, urgent">
+            </div>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+                <button class="btn-create" onclick="createInvestigation()"><i class="fas fa-plus"></i> Create</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+    const csrfToken = '{{ csrf_token() }}';
+    
+    function openModal() { document.getElementById('createModal').classList.add('active'); }
+    function closeModal() { document.getElementById('createModal').classList.remove('active'); }
+    
+    document.getElementById('createModal').addEventListener('click', function(e) {
+        if (e.target === this) closeModal();
+    });
+    
+    function createInvestigation() {
+        const title = document.getElementById('invTitle').value.trim();
+        if (!title) { alert('Please enter a title'); return; }
+        
+        const tags = document.getElementById('invTags').value.split(',').map(t => t.trim()).filter(t => t);
+        
+        fetch('/api/investigations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({
+                title: title,
+                description: document.getElementById('invDesc').value.trim(),
+                severity: document.getElementById('invSeverity').value,
+                tags: tags
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.id) {
+                window.location.href = '/investigation/' + data.id;
+            } else {
+                alert('Error: ' + (data.error || 'Unknown'));
+            }
+        });
+    }
+    </script>
+</body>
+</html>

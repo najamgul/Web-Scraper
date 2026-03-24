@@ -63,6 +63,64 @@
                     </span>
                 </div>
             </div>
+
+<!-- Zero-Day Alert Banner (hidden by default) -->
+<div id="zero-day-banner" style="
+    display: none;
+    background: linear-gradient(135deg, rgba(220, 38, 38, 0.15) 0%, rgba(124, 58, 237, 0.15) 100%);
+    border: 2px solid rgba(220, 38, 38, 0.5);
+    border-radius: 20px;
+    padding: 2rem 2.5rem;
+    margin: 2rem 0;
+    box-shadow: 0 10px 30px rgba(220, 38, 38, 0.2);
+    animation: zeroDayPulse 2s ease-in-out infinite;
+">
+    <div style="display: flex; align-items: center; gap: 1.5rem; margin-bottom: 1.2rem;">
+        <div style="
+            width: 50px; height: 50px;
+            background: linear-gradient(135deg, #dc2626, #7c3aed);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.5rem;
+            animation: spin 3s linear infinite;
+        ">🛡️</div>
+        <div>
+            <h3 style="color: #fca5a5; font-size: 1.5rem; margin: 0;">⚠️ Potential Zero-Day Threat Detected</h3>
+            <p style="color: #e2e8f0; margin: 0.5rem 0 0; font-size: 1rem;">
+                This input exhibits patterns not seen in any known threat database
+            </p>
+        </div>
+    </div>
+    <div id="zero-day-details" style="
+        background: rgba(15, 23, 42, 0.6);
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-top: 1rem;
+    ">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem;">
+            <div>
+                <span style="color: #94a3b8; font-size: 0.9rem;">Anomaly Score</span>
+                <div id="zd-anomaly-score" style="font-size: 1.8rem; font-weight: 800; color: #fca5a5;">—</div>
+            </div>
+            <div>
+                <span style="color: #94a3b8; font-size: 0.9rem;">ML Confidence</span>
+                <div id="zd-confidence" style="font-size: 1.8rem; font-weight: 800; color: #fbbf24;">—</div>
+            </div>
+            <div>
+                <span style="color: #94a3b8; font-size: 0.9rem;">Detection Method</span>
+                <div style="font-size: 1.1rem; font-weight: 600; color: #c4b5fd;">Isolation Forest Anomaly Detection</div>
+            </div>
+        </div>
+        <div id="zd-reasoning" style="
+            margin-top: 1.2rem;
+            padding-top: 1.2rem;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            color: #e2e8f0;
+            font-size: 0.95rem;
+            line-height: 1.6;
+        "></div>
+    </div>
+</div>
     <!-- ========================================= -->
 <!-- ✅ AI THREAT CONTEXT ENRICHMENT SECTION -->
 <!-- ONLY LOADS AFTER CLASSIFICATION COMPLETES -->
@@ -610,34 +668,117 @@
 </div>
         
         
-        <div class="chart-grid">
+        <!-- ========================================= -->
+        <!-- 📊 COMPREHENSIVE VISUALIZATION SECTION    -->
+        <!-- ========================================= -->
+
+        <h2 class="section-title"><i class="fas fa-chart-line"></i> Threat Intelligence Visualizations</h2>
+
+        <!-- ROW 1: ML Confidence Gauge + Threat Radar -->
+        <div class="chart-grid" style="grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));">
+            
+            <!-- ML CONFIDENCE GAUGE -->
+            <div class="chart-container" id="confidence-gauge-container" style="position: relative;">
+                <div class="chart-title"><i class="fas fa-brain" style="color: #7c3aed;"></i> ML Model Confidence</div>
+                <div class="chart-wrapper" style="display: flex; align-items: center; justify-content: center;">
+                    <canvas id="confidenceGauge"></canvas>
+                </div>
+                <div id="confidence-label" style="
+                    text-align: center;
+                    margin-top: -2rem;
+                    font-size: 0.95rem;
+                    color: #94a3b8;
+                ">Waiting for classification...</div>
+            </div>
+
+            <!-- THREAT RADAR CHART (Multi-API Spider) -->
             <div class="chart-container">
-                <div class="chart-title">Classification Overview</div>
+                <div class="chart-title"><i class="fas fa-crosshairs" style="color: #f59e0b;"></i> Multi-Source Threat Profile</div>
                 <div class="chart-wrapper">
-                    <canvas id="classificationPie"></canvas>
+                    <canvas id="threatRadar"></canvas>
                 </div>
             </div>
+        </div>
+
+        <!-- ROW 2: VirusTotal + OTX -->
+        <div class="chart-grid" style="grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));">
             
+            <!-- VIRUSTOTAL DETECTIONS (Improved) -->
             <div class="chart-container">
-                <div class="chart-title">VirusTotal Detections</div>
+                <div class="chart-title"><i class="fas fa-shield-virus" style="color: #e74c3c;"></i> VirusTotal Engine Analysis</div>
                 <div class="chart-wrapper">
                     <canvas id="vtBarChart"></canvas>
                 </div>
             </div>
-            
-            {% if otx_fmt %}
+
+            <!-- OTX THREAT GAUGE (Always Present) -->
             <div class="chart-container">
-                <div class="chart-title">OTX Threat Analysis</div>
-                <div class="chart-wrapper">
+                <div class="chart-title"><i class="fas fa-satellite-dish" style="color: #4cc9f0;"></i> OTX Threat Score</div>
+                <div class="chart-wrapper" style="display: flex; align-items: center; justify-content: center;">
                     <canvas id="otxChart"></canvas>
                 </div>
+                <div id="otx-chart-label" style="
+                    text-align: center;
+                    margin-top: -1.5rem;
+                    font-size: 0.95rem;
+                    color: #94a3b8;
+                ">Loading OTX data...</div>
             </div>
-            {% endif %}
+        </div>
+
+        <!-- ROW 3: Classification Breakdown + Scan History -->
+        <div class="chart-grid" style="grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));">
             
+            <!-- CLASSIFICATION DOUGHNUT (Current Scan) -->
             <div class="chart-container">
-                <div class="chart-title">Overall History (All Results)</div>
+                <div class="chart-title"><i class="fas fa-tag" style="color: #2ecc71;"></i> Current Scan Classification</div>
+                <div class="chart-wrapper">
+                    <canvas id="classificationPie"></canvas>
+                </div>
+            </div>
+
+            <!-- OVERALL SCAN HISTORY -->
+            <div class="chart-container">
+                <div class="chart-title"><i class="fas fa-history" style="color: #9f7aea;"></i> All Scans History</div>
                 <div class="chart-wrapper">
                     <canvas id="overallPie"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- THREAT INTELLIGENCE SUMMARY PANEL -->
+        <div style="
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 2.5rem;
+            margin: 3rem 0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        ">
+            <h3 style="color: #4cc9f0; font-size: 1.4rem; margin-bottom: 2rem; display: flex; align-items: center; gap: 0.8rem;">
+                <i class="fas fa-clipboard-check"></i> Threat Intelligence Summary
+            </h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1.5rem;">
+                <div style="text-align: center; padding: 1.5rem; background: rgba(15, 23, 42, 0.5); border-radius: 15px; border-left: 4px solid #e74c3c;">
+                    <div class="animated-counter" data-target="0" id="summary-vt" style="font-size: 2.2rem; font-weight: 800; color: #e74c3c;">—</div>
+                    <div style="color: #94a3b8; font-size: 0.9rem; margin-top: 0.5rem;">VT Score</div>
+                </div>
+                <div style="text-align: center; padding: 1.5rem; background: rgba(15, 23, 42, 0.5); border-radius: 15px; border-left: 4px solid #4cc9f0;">
+                    <div class="animated-counter" data-target="0" id="summary-otx" style="font-size: 2.2rem; font-weight: 800; color: #4cc9f0;">—</div>
+                    <div style="color: #94a3b8; font-size: 0.9rem; margin-top: 0.5rem;">OTX Threat</div>
+                </div>
+                <div style="text-align: center; padding: 1.5rem; background: rgba(15, 23, 42, 0.5); border-radius: 15px; border-left: 4px solid #f59e0b;">
+                    <div class="animated-counter" data-target="0" id="summary-shodan" style="font-size: 2.2rem; font-weight: 800; color: #f59e0b;">—</div>
+                    <div style="color: #94a3b8; font-size: 0.9rem; margin-top: 0.5rem;">Shodan Risk</div>
+                </div>
+                <div style="text-align: center; padding: 1.5rem; background: rgba(15, 23, 42, 0.5); border-radius: 15px; border-left: 4px solid #7c3aed;">
+                    <div class="animated-counter" data-target="0" id="summary-abuse" style="font-size: 2.2rem; font-weight: 800; color: #7c3aed;">—</div>
+                    <div style="color: #94a3b8; font-size: 0.9rem; margin-top: 0.5rem;">AbuseIPDB</div>
+                </div>
+                <div style="text-align: center; padding: 1.5rem; background: rgba(15, 23, 42, 0.5); border-radius: 15px; border-left: 4px solid #2ecc71;">
+                    <div id="summary-confidence" style="font-size: 2.2rem; font-weight: 800; color: #2ecc71;">—</div>
+                    <div style="color: #94a3b8; font-size: 0.9rem; margin-top: 0.5rem;">ML Confidence</div>
                 </div>
             </div>
         </div>
@@ -682,70 +823,364 @@
     }
 
     function renderStaticCharts() {
-        const clsLabels = ['Malicious', 'Benign', 'Informational', 'Unknown'];
-        const clsValues = clsLabels.map(label => label === currentClassification ? 1 : 0);
-        const classificationCanvas = document.getElementById('classificationPie');
+        const COLOR_MAP = {
+            'Malicious': '#e74c3c', 'Benign': '#2ecc71', 'Suspicious': '#f59e0b',
+            'Potential Zero-Day': '#7c3aed', 'Informational': '#3498db', 'Unknown': '#64748b'
+        };
+        const allLabels = ['Malicious', 'Benign', 'Suspicious', 'Potential Zero-Day', 'Informational', 'Unknown'];
+        const allColors = allLabels.map(l => COLOR_MAP[l]);
 
-        if (classificationCanvas) {
-            if (!chartState.classificationChart) {
-                chartState.classificationChart = new Chart(classificationCanvas, {
-                    type: 'pie',
-                    data: { labels: clsLabels, datasets: [{ data: clsValues, backgroundColor: ['#e74c3c', '#2ecc71', '#3498db', '#95a5a6'] }] },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: { position: 'bottom', labels: { color: '#e2e8f0', font: { size: 14 } } }
-                        }
+        // ── 1. CLASSIFICATION DOUGHNUT (Current Scan) ──
+        const clsCanvas = document.getElementById('classificationPie');
+        if (clsCanvas) {
+            const clsColor = COLOR_MAP[currentClassification] || '#64748b';
+            if (chartState.classificationChart) chartState.classificationChart.destroy();
+            chartState.classificationChart = new Chart(clsCanvas, {
+                type: 'doughnut',
+                data: {
+                    labels: [currentClassification, ''],
+                    datasets: [{
+                        data: [1, 0],
+                        backgroundColor: [clsColor, 'rgba(100, 116, 139, 0.15)'],
+                        borderWidth: 0,
+                        hoverOffset: 8
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false, cutout: '65%',
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { enabled: false }
                     }
-                });
-            } else {
-                chartState.classificationChart.data.datasets[0].data = clsValues;
-                chartState.classificationChart.update();
-            }
+                },
+                plugins: [{
+                    beforeDraw: function(chart) {
+                        const ctx = chart.ctx;
+                        const { width, height } = chart;
+                        ctx.save();
+                        // Classification label
+                        ctx.font = 'bold ' + Math.max(16, height / 10) + 'px "Segoe UI", sans-serif';
+                        ctx.textBaseline = 'middle';
+                        ctx.textAlign = 'center';
+                        ctx.fillStyle = clsColor;
+                        ctx.fillText(currentClassification, width / 2, height / 2 - 10);
+                        // Sub-label
+                        ctx.font = Math.max(11, height / 18) + 'px "Segoe UI", sans-serif';
+                        ctx.fillStyle = '#94a3b8';
+                        ctx.fillText('Current Scan', width / 2, height / 2 + 18);
+                        ctx.restore();
+                    }
+                }]
+            });
         }
 
+        // ── 2. VIRUSTOTAL BAR CHART (Improved) ──
         const vtStats = extractVtStats(rawVtData);
         const vtCanvas = document.getElementById('vtBarChart');
         if (vtCanvas) {
             if (Object.keys(vtStats).length === 0) {
-                vtCanvas.parentElement.innerHTML = '<div class="no-data"><p>No VirusTotal data available for chart</p></div>';
+                vtCanvas.parentElement.innerHTML = '<div class="no-data"><i class="fas fa-shield-virus" style="font-size: 2rem; margin-bottom: 1rem; color: #475569;"></i><p>No VirusTotal data available</p></div>';
             } else if (!chartState.vtBarChart) {
+                const vtLabels = Object.keys(vtStats).map(k => k.charAt(0).toUpperCase() + k.slice(1));
+                const vtValues = Object.values(vtStats);
+                const vtColors = Object.keys(vtStats).map(k => {
+                    if (k === 'malicious') return '#e74c3c';
+                    if (k === 'suspicious') return '#f59e0b';
+                    if (k === 'harmless') return '#2ecc71';
+                    return '#64748b';
+                });
+                const total = vtValues.reduce((a,b) => a+b, 0);
+
                 chartState.vtBarChart = new Chart(vtCanvas, {
                     type: 'bar',
                     data: {
-                        labels: Object.keys(vtStats),
-                        datasets: [{ label: 'VirusTotal Detection Stats', data: Object.values(vtStats), backgroundColor: ['#e74c3c', '#f39c12', '#95a5a6', '#2ecc71'] }]
+                        labels: vtLabels,
+                        datasets: [{
+                            label: 'Engines',
+                            data: vtValues,
+                            backgroundColor: vtColors.map(c => c + 'cc'),
+                            borderColor: vtColors,
+                            borderWidth: 2,
+                            borderRadius: 8,
+                            borderSkipped: false,
+                        }]
                     },
                     options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { legend: { display: false } },
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                                titleColor: '#4cc9f0',
+                                bodyColor: '#e2e8f0',
+                                borderColor: 'rgba(76, 201, 240, 0.3)',
+                                borderWidth: 1,
+                                cornerRadius: 8,
+                                padding: 12,
+                                callbacks: {
+                                    label: function(ctx) {
+                                        const pct = total > 0 ? ((ctx.parsed.y / total) * 100).toFixed(1) : 0;
+                                        return `${ctx.parsed.y} engines (${pct}%)`;
+                                    }
+                                }
+                            }
+                        },
                         scales: {
-                            y: { beginAtZero: true, ticks: { precision: 0, color: '#e2e8f0' }, grid: { color: 'rgba(255, 255, 255, 0.1)' } },
-                            x: { ticks: { color: '#e2e8f0' }, grid: { color: 'rgba(255, 255, 255, 0.1)' } }
+                            y: {
+                                beginAtZero: true,
+                                ticks: { precision: 0, color: '#94a3b8', font: { size: 12 } },
+                                grid: { color: 'rgba(148, 163, 184, 0.08)' }
+                            },
+                            x: {
+                                ticks: { color: '#e2e8f0', font: { size: 12, weight: '600' } },
+                                grid: { display: false }
+                            }
+                        },
+                        animation: {
+                            duration: 1200,
+                            easing: 'easeOutQuart',
+                            onComplete: function() {
+                                const ctx = this.ctx;
+                                ctx.save();
+                                ctx.font = 'bold 13px "Segoe UI", sans-serif';
+                                ctx.textAlign = 'center';
+                                ctx.textBaseline = 'bottom';
+                                this.data.datasets[0].data.forEach((val, i) => {
+                                    const meta = this.getDatasetMeta(0).data[i];
+                                    if (meta && val > 0) {
+                                        ctx.fillStyle = '#e2e8f0';
+                                        ctx.fillText(val, meta.x, meta.y - 6);
+                                    }
+                                });
+                                ctx.restore();
+                            }
                         }
                     }
+                });
+
+                // Animate VT summary counter
+                const vtMal = vtStats.malicious || 0;
+                const vtScore = total > 0 ? Math.round((vtMal / total) * 100) : 0;
+                animateCounter('summary-vt', vtScore, '/100');
+            }
+        }
+
+        // ── 3. OVERALL HISTORY PIE ──
+        const overallCanvas = document.getElementById('overallPie');
+        if (overallCanvas) {
+            if (!overallData || !overallData.labels || !overallData.values || overallData.values.every(v => v === 0)) {
+                overallCanvas.parentElement.innerHTML = '<div class="no-data"><i class="fas fa-history" style="font-size: 2rem; margin-bottom: 1rem; color: #475569;"></i><p>No scan history yet</p></div>';
+            } else if (!chartState.overallPieChart) {
+                const historyColors = overallData.labels.map(l => COLOR_MAP[l] || '#64748b');
+                const totalScans = overallData.values.reduce((a,b) => a+b, 0);
+                chartState.overallPieChart = new Chart(overallCanvas, {
+                    type: 'doughnut',
+                    data: {
+                        labels: overallData.labels,
+                        datasets: [{
+                            data: overallData.values,
+                            backgroundColor: historyColors.map(c => c + 'cc'),
+                            borderColor: historyColors,
+                            borderWidth: 2,
+                            hoverOffset: 10
+                        }]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false, cutout: '50%',
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: { color: '#e2e8f0', font: { size: 12 }, padding: 15, usePointStyle: true, pointStyleWidth: 10 }
+                            },
+                            tooltip: {
+                                backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                                titleColor: '#4cc9f0',
+                                bodyColor: '#e2e8f0',
+                                borderColor: 'rgba(76, 201, 240, 0.3)',
+                                borderWidth: 1,
+                                cornerRadius: 8,
+                                padding: 12,
+                                callbacks: {
+                                    label: function(ctx) {
+                                        const pct = totalScans > 0 ? ((ctx.parsed / totalScans) * 100).toFixed(1) : 0;
+                                        return ` ${ctx.label}: ${ctx.parsed} (${pct}%)`;
+                                    }
+                                }
+                            }
+                        },
+                        animation: { animateRotate: true, duration: 1500, easing: 'easeOutBounce' }
+                    },
+                    plugins: [{
+                        beforeDraw: function(chart) {
+                            const ctx = chart.ctx;
+                            const { width, height } = chart;
+                            ctx.save();
+                            ctx.font = 'bold ' + Math.max(20, height / 8) + 'px "Segoe UI", sans-serif';
+                            ctx.textBaseline = 'middle';
+                            ctx.textAlign = 'center';
+                            ctx.fillStyle = '#e2e8f0';
+                            ctx.fillText(totalScans, width / 2, height / 2 - 8);
+                            ctx.font = Math.max(10, height / 18) + 'px "Segoe UI", sans-serif';
+                            ctx.fillStyle = '#94a3b8';
+                            ctx.fillText('Total Scans', width / 2, height / 2 + 16);
+                            ctx.restore();
+                        }
+                    }]
                 });
             }
         }
 
-        const overallCanvas = document.getElementById('overallPie');
-        if (overallCanvas) {
-            if (!overallData || !overallData.labels || !overallData.values) {
-                overallCanvas.parentElement.innerHTML = '<div class="no-data"><p>No historical data available</p></div>';
-            } else if (!chartState.overallPieChart) {
-                chartState.overallPieChart = new Chart(overallCanvas, {
-                    type: 'pie',
-                    data: { labels: overallData.labels, datasets: [{ data: overallData.values, backgroundColor: ['#e74c3c', '#2ecc71', '#3498db', '#95a5a6'] }] },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { legend: { position: 'bottom', labels: { color: '#e2e8f0', font: { size: 14 } } } }
-                    }
-                });
-            }
+        // ── 4. THREAT RADAR (Multi-API Spider Chart) ──
+        renderThreatRadar();
+    }
+
+    // Threat Radar Chart — needs API data
+    function renderThreatRadar(apiScores) {
+        const radarCanvas = document.getElementById('threatRadar');
+        if (!radarCanvas) return;
+
+        // Compute VT score from raw data
+        const vtStats = extractVtStats(rawVtData);
+        let vtScore = 0;
+        if (vtStats && Object.keys(vtStats).length > 0) {
+            const total = Object.values(vtStats).reduce((a,b) => a+b, 0);
+            vtScore = total > 0 ? Math.round(((vtStats.malicious || 0) / total) * 100) : 0;
         }
+
+        // OTX and other scores will be updated via AJAX
+        const scores = apiScores || { vt: vtScore, otx: 0, shodan: 0, abuseipdb: 0 };
+
+        if (window.threatRadarChart) window.threatRadarChart.destroy();
+
+        window.threatRadarChart = new Chart(radarCanvas, {
+            type: 'radar',
+            data: {
+                labels: ['VirusTotal', 'AlienVault OTX', 'Shodan', 'AbuseIPDB'],
+                datasets: [{
+                    label: 'Threat Score',
+                    data: [scores.vt, scores.otx, scores.shodan, scores.abuseipdb],
+                    backgroundColor: 'rgba(231, 76, 60, 0.15)',
+                    borderColor: '#e74c3c',
+                    borderWidth: 2,
+                    pointBackgroundColor: ['#e74c3c', '#4cc9f0', '#f59e0b', '#7c3aed'],
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointRadius: 6,
+                    pointHoverRadius: 9,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: {
+                    r: {
+                        beginAtZero: true,
+                        max: 100,
+                        ticks: {
+                            stepSize: 25,
+                            color: '#64748b',
+                            backdropColor: 'transparent',
+                            font: { size: 10 }
+                        },
+                        grid: { color: 'rgba(148, 163, 184, 0.15)' },
+                        angleLines: { color: 'rgba(148, 163, 184, 0.15)' },
+                        pointLabels: {
+                            color: '#e2e8f0',
+                            font: { size: 13, weight: '600' }
+                        }
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                        titleColor: '#4cc9f0',
+                        bodyColor: '#e2e8f0',
+                        borderColor: 'rgba(76, 201, 240, 0.3)',
+                        borderWidth: 1,
+                        cornerRadius: 8,
+                        callbacks: {
+                            label: ctx => `${ctx.label}: ${ctx.parsed.r}/100`
+                        }
+                    }
+                },
+                animation: { duration: 1500, easing: 'easeOutQuart' }
+            }
+        });
+    }
+
+    // ML Confidence Gauge — updated after classification
+    function renderConfidenceGauge(confidence) {
+        const gaugeCanvas = document.getElementById('confidenceGauge');
+        if (!gaugeCanvas) return;
+
+        const pct = Math.round(confidence * 100);
+        const gaugeColor = pct >= 80 ? '#2ecc71' : pct >= 60 ? '#f59e0b' : pct >= 40 ? '#e67e22' : '#e74c3c';
+        const gaugeLabel = pct >= 80 ? 'High Confidence' : pct >= 60 ? 'Moderate' : pct >= 40 ? 'Low' : 'Very Low';
+
+        if (window.confidenceGaugeChart) window.confidenceGaugeChart.destroy();
+
+        window.confidenceGaugeChart = new Chart(gaugeCanvas, {
+            type: 'doughnut',
+            data: {
+                labels: ['Confidence', ''],
+                datasets: [{
+                    data: [pct, 100 - pct],
+                    backgroundColor: [gaugeColor, 'rgba(100, 116, 139, 0.1)'],
+                    borderWidth: 0,
+                    circumference: 180,
+                    rotation: 270,
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                cutout: '75%',
+                plugins: { legend: { display: false }, tooltip: { enabled: false } }
+            },
+            plugins: [{
+                beforeDraw: function(chart) {
+                    const ctx = chart.ctx;
+                    const { width, height } = chart;
+                    ctx.save();
+                    ctx.font = 'bold ' + Math.max(28, height / 5) + 'px "Segoe UI", sans-serif';
+                    ctx.textBaseline = 'middle';
+                    ctx.textAlign = 'center';
+                    ctx.fillStyle = gaugeColor;
+                    ctx.fillText(pct + '%', width / 2, height / 2 + 10);
+                    ctx.restore();
+                }
+            }]
+        });
+
+        // Update label
+        const label = document.getElementById('confidence-label');
+        if (label) {
+            label.innerHTML = `<span style="color: ${gaugeColor}; font-weight: 700;">${gaugeLabel}</span> — The model is ${pct}% sure about this classification`;
+        }
+
+        // Update summary panel
+        const summaryConf = document.getElementById('summary-confidence');
+        if (summaryConf) {
+            summaryConf.style.color = gaugeColor;
+            summaryConf.textContent = pct + '%';
+        }
+    }
+
+    // Animated counter helper
+    function animateCounter(elementId, target, suffix) {
+        suffix = suffix || '';
+        const el = document.getElementById(elementId);
+        if (!el) return;
+        let current = 0;
+        const step = Math.max(1, Math.ceil(target / 40));
+        const interval = setInterval(() => {
+            current += step;
+            if (current >= target) {
+                current = target;
+                clearInterval(interval);
+            }
+            el.textContent = current + suffix;
+        }, 30);
     }
 
     function createOTXChart(otx_fmt) {
@@ -1101,6 +1536,18 @@
                             elements.otxContent.style.transition = 'opacity 0.5s ease';
                             elements.otxContent.style.opacity = '1';
                         }, 100);
+
+                        // Update OTX chart label
+                        const otxLabel = document.getElementById('otx-chart-label');
+                        if (otxLabel) {
+                            const score = data.otx_formatted.threat_score || 0;
+                            otxLabel.innerHTML = score >= 70 ? '<span style="color:#e74c3c; font-weight:700;">High Risk</span>' :
+                                                 score >= 40 ? '<span style="color:#f59e0b; font-weight:700;">Moderate Risk</span>' :
+                                                 score >= 10 ? '<span style="color:#3498db; font-weight:700;">Low Risk</span>' :
+                                                 '<span style="color:#2ecc71; font-weight:700;">Clean</span>';
+                        }
+                        // Animate OTX summary counter
+                        animateCounter('summary-otx', data.otx_formatted.threat_score || 0, '/100');
                     } else {
                         throw new Error(data.error || 'Unknown error from OTX endpoint');
                     }
@@ -1141,11 +1588,58 @@
                         elements.classificationBadge.style.opacity = '0';
                         elements.classificationBadge.style.transition = 'opacity 0.3s ease';
                         setTimeout(() => {
-                            elements.classificationBadge.className = 'classification ' + currentClassification.toLowerCase();
+                            // Map classification to CSS class
+                            let cssClass = currentClassification.toLowerCase().replace(/\s+/g, '-');
+                            elements.classificationBadge.className = 'classification ' + cssClass;
                             elements.classificationBadge.textContent = currentClassification;
                             elements.classificationBadge.style.opacity = '1';
                         }, 300);
+
+                        // Show zero-day banner if applicable
+                        if (data.zero_day_analysis && data.zero_day_analysis.is_potential_zero_day) {
+                            const banner = document.getElementById('zero-day-banner');
+                            if (banner) {
+                                banner.style.display = 'block';
+                                banner.style.opacity = '0';
+                                setTimeout(() => {
+                                    banner.style.transition = 'opacity 0.8s ease';
+                                    banner.style.opacity = '1';
+                                }, 500);
+                            }
+                            // Fill in zero-day details
+                            const zdScore = document.getElementById('zd-anomaly-score');
+                            const zdConf = document.getElementById('zd-confidence');
+                            const zdReason = document.getElementById('zd-reasoning');
+                            if (zdScore) zdScore.textContent = data.zero_day_analysis.anomaly_score.toFixed(4);
+                            if (zdConf) zdConf.textContent = ((data.model_confidence || 0) * 100).toFixed(1) + '%';
+                            if (zdReason && data.reasoning) {
+                                const zdReasons = data.reasoning.filter(r => r.includes('ZERO-DAY') || r.includes('ANOMALY'));
+                                zdReason.innerHTML = zdReasons.map(r => `<p style="margin: 0.3rem 0;">• ${r}</p>`).join('');
+                            }
+                        }
+
                         renderStaticCharts();
+
+                        // Render ML Confidence Gauge
+                        if (typeof data.model_confidence === 'number') {
+                            renderConfidenceGauge(data.model_confidence);
+                        }
+
+                        // Update summary counters with API scores if available
+                        if (data.api_scores) {
+                            const scores = data.api_scores;
+                            if (typeof scores.vt_score === 'number') animateCounter('summary-vt', Math.round(scores.vt_score), '/100');
+                            if (typeof scores.shodan_score === 'number') animateCounter('summary-shodan', Math.round(scores.shodan_score), '/100');
+                            if (typeof scores.abuseipdb_score === 'number') animateCounter('summary-abuse', Math.round(scores.abuseipdb_score), '/100');
+                            // Update radar with real scores
+                            renderThreatRadar({
+                                vt: Math.round(scores.vt_score || 0),
+                                otx: Math.round(scores.otx_score || 0),
+                                shodan: Math.round(scores.shodan_score || 0),
+                                abuseipdb: Math.round(scores.abuseipdb_score || 0)
+                            });
+                        }
+
                         setTimeout(loadEnrichment, 2000);
                     } else {
                         console.warn('⚠️ Classification incomplete, retrying...');

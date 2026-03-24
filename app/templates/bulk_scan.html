@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bulk IOC Scanner - Threat Intelligence Platform</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='responsive.css') }}">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); min-height: 100vh; color: #e2e8f0; }
+        
+        .navbar { background: rgba(30, 41, 59, 0.95); padding: 1rem 2rem; box-shadow: 0 4px 15px rgba(0,0,0,0.3); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
+        .navbar-brand { font-size: 1.5rem; font-weight: 700; background: linear-gradient(135deg, #4361ee, #4cc9f0); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; display: flex; align-items: center; gap: 0.8rem; }
+        .navbar-links { display: flex; gap: 1rem; }
+        .navbar-links a { padding: 0.6rem 1.2rem; border-radius: 999px; background: rgba(76, 201, 240, 0.12); color: #cbd5e1; text-decoration: none; font-weight: 600; transition: all 0.3s; display: flex; align-items: center; gap: 0.5rem; }
+        .navbar-links a:hover { background: rgba(76, 201, 240, 0.25); color: #4cc9f0; }
+        .navbar-links a.active { background: rgba(67, 97, 238, 0.3); color: #4cc9f0; border: 1px solid rgba(67, 97, 238, 0.5); }
+        
+        .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+        
+        h1 { font-size: 2.5rem; font-weight: 800; background: linear-gradient(135deg, #4361ee, #4cc9f0); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 0.5rem; }
+        .subtitle { color: #94a3b8; font-size: 1.1rem; margin-bottom: 2.5rem; }
+        
+        .scan-form { background: rgba(30, 41, 59, 0.8); backdrop-filter: blur(10px); border-radius: 20px; padding: 2.5rem; border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 20px 40px rgba(0,0,0,0.3); margin-bottom: 3rem; }
+        .form-group { margin-bottom: 1.5rem; }
+        .form-group label { display: block; font-weight: 700; margin-bottom: 0.5rem; color: #e2e8f0; font-size: 1rem; }
+        .form-group input[type="text"] { width: 100%; padding: 0.9rem 1.2rem; border-radius: 12px; border: 1px solid rgba(255,255,255,0.15); background: rgba(15, 23, 42, 0.8); color: #e2e8f0; font-size: 1rem; transition: border-color 0.3s; }
+        .form-group input[type="text"]:focus { outline: none; border-color: #4361ee; box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.2); }
+        
+        .ioc-textarea { width: 100%; min-height: 200px; padding: 1.2rem; border-radius: 12px; border: 1px solid rgba(255,255,255,0.15); background: rgba(15, 23, 42, 0.8); color: #e2e8f0; font-family: 'Consolas', 'Courier New', monospace; font-size: 0.95rem; line-height: 1.6; resize: vertical; transition: border-color 0.3s; }
+        .ioc-textarea:focus { outline: none; border-color: #4361ee; box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.2); }
+        .ioc-textarea::placeholder { color: #64748b; }
+        
+        .ioc-counter { text-align: right; color: #94a3b8; font-size: 0.9rem; margin-top: 0.5rem; }
+        .ioc-counter span { color: #4cc9f0; font-weight: 700; }
+        
+        .form-actions { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+        .btn-scan { padding: 1rem 2.5rem; border-radius: 12px; border: none; background: linear-gradient(135deg, #4361ee, #4cc9f0); color: white; font-size: 1.1rem; font-weight: 700; cursor: pointer; transition: all 0.3s; display: flex; align-items: center; gap: 0.7rem; box-shadow: 0 10px 25px rgba(67, 97, 238, 0.3); }
+        .btn-scan:hover { transform: translateY(-3px); box-shadow: 0 15px 30px rgba(67, 97, 238, 0.4); }
+        .btn-scan:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        
+        .btn-upload { padding: 0.8rem 1.5rem; border-radius: 12px; border: 1px solid rgba(76, 201, 240, 0.3); background: rgba(76, 201, 240, 0.1); color: #4cc9f0; font-weight: 600; cursor: pointer; transition: all 0.3s; display: flex; align-items: center; gap: 0.5rem; }
+        .btn-upload:hover { background: rgba(76, 201, 240, 0.2); }
+        
+        /* Progress Section */
+        .progress-section { display: none; background: rgba(30, 41, 59, 0.8); backdrop-filter: blur(10px); border-radius: 20px; padding: 2.5rem; border: 1px solid rgba(255,255,255,0.08); margin-bottom: 3rem; }
+        .progress-bar-container { background: rgba(15, 23, 42, 0.8); border-radius: 999px; height: 24px; overflow: hidden; margin: 1.5rem 0; }
+        .progress-bar { height: 100%; background: linear-gradient(90deg, #4361ee, #4cc9f0); border-radius: 999px; transition: width 0.5s ease; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 700; color: white; min-width: 40px; }
+        .progress-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+        .progress-stat { text-align: center; padding: 1rem; background: rgba(15, 23, 42, 0.5); border-radius: 12px; }
+        .progress-stat .value { font-size: 1.8rem; font-weight: 800; }
+        .progress-stat .label { font-size: 0.8rem; color: #94a3b8; margin-top: 0.3rem; }
+        .progress-stat.malicious .value { color: #e74c3c; }
+        .progress-stat.benign .value { color: #2ecc71; }
+        .progress-stat.suspicious .value { color: #f59e0b; }
+        .progress-stat.zero-day .value { color: #7c3aed; }
+        .progress-stat.unknown .value { color: #64748b; }
+        .progress-stat.failed .value { color: #ef4444; }
+        
+        /* Past Scans */
+        .past-scans { margin-top: 3rem; }
+        .past-scans h2 { font-size: 1.5rem; margin-bottom: 1.5rem; color: #e2e8f0; display: flex; align-items: center; gap: 0.7rem; }
+        .scan-card { background: rgba(30, 41, 59, 0.6); border-radius: 15px; padding: 1.5rem; margin-bottom: 1rem; border: 1px solid rgba(255,255,255,0.06); transition: all 0.3s; display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 1.5rem; text-decoration: none; color: inherit; }
+        .scan-card:hover { background: rgba(30, 41, 59, 0.9); border-color: rgba(67, 97, 238, 0.3); transform: translateX(5px); }
+        .scan-card-title { font-weight: 700; font-size: 1.1rem; }
+        .scan-card-meta { color: #94a3b8; font-size: 0.85rem; margin-top: 0.3rem; }
+        .scan-card-badge { padding: 0.4rem 1rem; border-radius: 999px; font-size: 0.85rem; font-weight: 700; }
+        .badge-completed { background: rgba(46, 204, 113, 0.15); color: #2ecc71; border: 1px solid rgba(46, 204, 113, 0.3); }
+        .badge-running { background: rgba(67, 97, 238, 0.15); color: #4361ee; border: 1px solid rgba(67, 97, 238, 0.3); animation: pulse 2s infinite; }
+        .badge-failed { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+        
+        .mini-stats { display: flex; gap: 0.8rem; }
+        .mini-stat { font-size: 0.85rem; font-weight: 600; }
+        .mini-stat.mal { color: #e74c3c; }
+        .mini-stat.ben { color: #2ecc71; }
+        .mini-stat.sus { color: #f59e0b; }
+        
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+        
+        .file-input { display: none; }
+        
+        @media (max-width: 768px) {
+            .scan-card { grid-template-columns: 1fr; }
+            .form-actions { flex-direction: column; }
+            .btn-scan, .btn-upload { width: 100%; justify-content: center; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-brand"><i class="fas fa-shield-alt"></i> ThreatIntel</div>
+        <div class="navbar-links">
+            <a href="{{ url_for('main.index') }}"><i class="fas fa-search"></i> Scanner</a>
+            <a href="{{ url_for('bulk.bulk_scan_page') }}" class="active"><i class="fas fa-layer-group"></i> Bulk Scan</a>
+            <a href="{{ url_for('bulk.investigations_list') }}"><i class="fas fa-book"></i> Investigations</a>
+            <a href="{{ url_for('main.dashboard') }}"><i class="fas fa-chart-line"></i> Dashboard</a>
+            <a href="{{ url_for('main.history') }}"><i class="fas fa-history"></i> History</a>
+        </div>
+    </nav>
+    
+    <div class="container">
+        <h1><i class="fas fa-layer-group"></i> Bulk IOC Scanner</h1>
+        <p class="subtitle">Scan hundreds of IOCs at once — paste them below or upload a file</p>
+        
+        <div class="scan-form" id="scanForm">
+            <div class="form-group">
+                <label><i class="fas fa-tag"></i> Scan Name (optional)</label>
+                <input type="text" id="scanName" placeholder="e.g., Phishing Campaign March 2026">
+            </div>
+            
+            <div class="form-group">
+                <label><i class="fas fa-list"></i> IOC List (one per line)</label>
+                <textarea class="ioc-textarea" id="iocInput" placeholder="8.8.8.8
+google.com
+https://malicious-site.com/phish
+44d88612fea8a8f36de82e1278abb02f
+suspicious keyword
+...
+
+Supports: IPs, Domains, URLs, Hashes, Keywords
+Maximum: 500 IOCs per batch"></textarea>
+                <div class="ioc-counter">IOCs detected: <span id="iocCount">0</span> / 500</div>
+            </div>
+            
+            <div class="form-actions">
+                <button class="btn-scan" id="btnScan" onclick="startBulkScan()">
+                    <i class="fas fa-rocket"></i> Start Bulk Scan
+                </button>
+                <label class="btn-upload" for="fileInput">
+                    <i class="fas fa-file-upload"></i> Upload .txt / .csv
+                </label>
+                <input type="file" id="fileInput" class="file-input" accept=".txt,.csv" onchange="handleFileUpload(event)">
+            </div>
+        </div>
+        
+        <!-- Progress Section -->
+        <div class="progress-section" id="progressSection">
+            <h2 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.7rem;">
+                <i class="fas fa-spinner fa-spin" style="color: #4361ee;" id="progressSpinner"></i>
+                <span id="progressTitle">Scanning IOCs...</span>
+            </h2>
+            <p style="color: #94a3b8; margin-bottom: 1rem;" id="progressSubtitle">Processing your indicators...</p>
+            
+            <div class="progress-bar-container">
+                <div class="progress-bar" id="progressBar" style="width: 0%;">0%</div>
+            </div>
+            
+            <div class="progress-stats">
+                <div class="progress-stat malicious"><div class="value" id="pMalicious">0</div><div class="label">Malicious</div></div>
+                <div class="progress-stat benign"><div class="value" id="pBenign">0</div><div class="label">Benign</div></div>
+                <div class="progress-stat suspicious"><div class="value" id="pSuspicious">0</div><div class="label">Suspicious</div></div>
+                <div class="progress-stat zero-day"><div class="value" id="pZeroDay">0</div><div class="label">Zero-Day</div></div>
+                <div class="progress-stat unknown"><div class="value" id="pUnknown">0</div><div class="label">Unknown</div></div>
+                <div class="progress-stat failed"><div class="value" id="pFailed">0</div><div class="label">Failed</div></div>
+            </div>
+            
+            <div style="text-align: center; margin-top: 2rem; display: none;" id="viewResultsBtn">
+                <a id="viewResultsLink" href="#" style="padding: 1rem 2.5rem; border-radius: 12px; background: linear-gradient(135deg, #2ecc71, #27ae60); color: white; text-decoration: none; font-weight: 700; font-size: 1.1rem; display: inline-flex; align-items: center; gap: 0.7rem; box-shadow: 0 10px 25px rgba(46, 204, 113, 0.3); transition: all 0.3s;">
+                    <i class="fas fa-chart-bar"></i> View Full Results
+                </a>
+            </div>
+        </div>
+        
+        <!-- Past Scans -->
+        {% if past_scans %}
+        <div class="past-scans">
+            <h2><i class="fas fa-clock-rotate-left"></i> Previous Bulk Scans</h2>
+            {% for scan in past_scans %}
+            <a href="{{ url_for('bulk.bulk_results_page', bulk_id=scan.id) }}" class="scan-card">
+                <div>
+                    <div class="scan-card-title">{{ scan.name }}</div>
+                    <div class="scan-card-meta">{{ scan.total_iocs }} IOCs • {{ scan.created_at.strftime('%b %d, %Y %H:%M') if scan.created_at else 'N/A' }}</div>
+                </div>
+                <div class="mini-stats">
+                    <span class="mini-stat mal"><i class="fas fa-exclamation-triangle"></i> {{ scan.malicious_count }}</span>
+                    <span class="mini-stat ben"><i class="fas fa-check-circle"></i> {{ scan.benign_count }}</span>
+                    <span class="mini-stat sus"><i class="fas fa-question-circle"></i> {{ scan.suspicious_count }}</span>
+                </div>
+                <span class="scan-card-badge badge-{{ scan.status }}">{{ scan.status | capitalize }}</span>
+            </a>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    
+    <script>
+    const iocInput = document.getElementById('iocInput');
+    const iocCount = document.getElementById('iocCount');
+    const csrfToken = '{{ csrf_token() }}';
+    
+    iocInput.addEventListener('input', () => {
+        const lines = iocInput.value.split('\n').filter(l => l.trim().length > 2);
+        iocCount.textContent = lines.length;
+        iocCount.style.color = lines.length > 500 ? '#e74c3c' : '#4cc9f0';
+    });
+    
+    function handleFileUpload(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(ev) {
+            iocInput.value = ev.target.result;
+            iocInput.dispatchEvent(new Event('input'));
+        };
+        reader.readAsText(file);
+    }
+    
+    function startBulkScan() {
+        const iocs = iocInput.value.trim();
+        if (!iocs) { alert('Please enter at least one IOC'); return; }
+        
+        const name = document.getElementById('scanName').value.trim();
+        const btn = document.getElementById('btnScan');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Starting...';
+        
+        fetch('/api/bulk-scan', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({ iocs: iocs, name: name })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) { alert(data.error); btn.disabled = false; btn.innerHTML = '<i class="fas fa-rocket"></i> Start Bulk Scan'; return; }
+            
+            // Show progress
+            document.getElementById('scanForm').style.display = 'none';
+            document.getElementById('progressSection').style.display = 'block';
+            
+            // Poll progress
+            pollProgress(data.bulk_id);
+        })
+        .catch(err => {
+            alert('Error: ' + err.message);
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-rocket"></i> Start Bulk Scan';
+        });
+    }
+    
+    function pollProgress(bulkId) {
+        const interval = setInterval(() => {
+            fetch(`/api/bulk-scan/${bulkId}/status`)
+            .then(r => r.json())
+            .then(data => {
+                const pct = data.progress || 0;
+                document.getElementById('progressBar').style.width = pct + '%';
+                document.getElementById('progressBar').textContent = Math.round(pct) + '%';
+                document.getElementById('progressSubtitle').textContent = `${data.completed_iocs} / ${data.total_iocs} IOCs processed`;
+                
+                document.getElementById('pMalicious').textContent = data.malicious_count;
+                document.getElementById('pBenign').textContent = data.benign_count;
+                document.getElementById('pSuspicious').textContent = data.suspicious_count;
+                document.getElementById('pZeroDay').textContent = data.zero_day_count;
+                document.getElementById('pUnknown').textContent = data.unknown_count;
+                document.getElementById('pFailed').textContent = data.failed_count;
+                
+                if (data.status === 'completed' || data.status === 'failed') {
+                    clearInterval(interval);
+                    document.getElementById('progressSpinner').className = 'fas fa-check-circle';
+                    document.getElementById('progressSpinner').style.color = '#2ecc71';
+                    document.getElementById('progressTitle').textContent = data.status === 'completed' ? 'Scan Complete!' : 'Scan Failed';
+                    document.getElementById('progressBar').style.width = '100%';
+                    document.getElementById('progressBar').textContent = '100%';
+                    
+                    document.getElementById('viewResultsBtn').style.display = 'block';
+                    document.getElementById('viewResultsLink').href = `/bulk-results/${bulkId}`;
+                }
+            });
+        }, 2000);
+    }
+    </script>
+</body>
+</html>
