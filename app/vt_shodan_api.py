@@ -53,7 +53,7 @@ def vt_lookup_ip(ip):
             return {
                 "threat_score": threat_score,
                 "classification": classification,
-                "last_analysis_stats": stats,  # ✅ Added for template compatibility
+                "last_analysis_stats": stats, # Added for template compatibility
                 "details": {
                     "summary": f"{malicious} out of {total_engines} engines flagged this IP as malicious",
                     "risk_level": risk_level,
@@ -115,7 +115,7 @@ def vt_lookup_domain(domain):
             return {
                 "threat_score": threat_score,
                 "classification": classification,
-                "last_analysis_stats": stats,  # ✅ Added for template compatibility
+                "last_analysis_stats": stats, # Added for template compatibility
                 "details": {
                     "summary": f"{malicious} out of {total_engines} engines flagged this domain as malicious",
                     "risk_level": risk_level,
@@ -179,7 +179,7 @@ def vt_lookup_url(url):
             return {
                 "threat_score": threat_score,
                 "classification": classification,
-                "last_analysis_stats": stats,  # ✅ Added for template compatibility
+                "last_analysis_stats": stats, # Added for template compatibility
                 "details": {
                     "summary": f"{malicious} out of {total_engines} engines flagged this URL as malicious",
                     "risk_level": risk_level,
@@ -252,7 +252,7 @@ def shodan_lookup(ip):
             return {
                 "threat_score": threat_score,
                 "classification": classification,
-                # ✅ Added for template compatibility
+                # Added for template compatibility
                 "ip_str": ip,
                 "ip": ip,
                 "org": data.get("org", "Unknown"),
@@ -276,16 +276,16 @@ def shodan_lookup(ip):
                 "raw": data
             }
         elif response.status_code == 401:
-            logger.error("❌ Shodan: Invalid API key")
+            logger.error(" Shodan: Invalid API key")
             return {"error": "Invalid Shodan API key", "threat_score": 0, "classification": "Unknown", "details": {}}
         elif response.status_code == 403:
-            logger.error("❌ Shodan: Access denied (insufficient plan or forbidden endpoint)")
+            logger.error(" Shodan: Access denied (insufficient plan or forbidden endpoint)")
             return {"error": "Shodan access denied (check plan permissions)", "threat_score": 0, "classification": "Unknown", "details": {}}
         elif response.status_code == 429:
-            logger.error("❌ Shodan: Rate limit exceeded")
+            logger.error(" Shodan: Rate limit exceeded")
             return {"error": "Shodan rate limit exceeded", "threat_score": 0, "classification": "Unknown", "details": {}}
         else:
-            logger.error(f"❌ Shodan API error {response.status_code}: {response.text}")
+            logger.error(f" Shodan API error {response.status_code}: {response.text}")
             return {"error": f"Shodan API error: {response.status_code}", "threat_score": 0, "classification": "Unknown", "details": {}}
     
     except Exception as e:

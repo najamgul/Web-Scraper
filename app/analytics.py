@@ -90,7 +90,7 @@ def get_top_malicious_ips(limit=10):
 
         results = list(IOCResult.objects.aggregate(pipeline))
         if results:
-            logger.info(f"📊 Top Malicious IPs: Found {len(results)} malicious/suspicious results")
+            logger.info(f" Top Malicious IPs: Found {len(results)} malicious/suspicious results")
             return _prepare_aggregate_results(results), "malicious"
 
         fallback_match = {
@@ -110,7 +110,7 @@ def get_top_malicious_ips(limit=10):
         ]
 
         fallback_results = list(IOCResult.objects.aggregate(fallback_pipeline))
-        logger.info(f"📊 Top IPs fallback: Showing {len(fallback_results)} results due to no malicious detections")
+        logger.info(f" Top IPs fallback: Showing {len(fallback_results)} results due to no malicious detections")
         return _prepare_aggregate_results(fallback_results), "all"
     except Exception as e:
         logger.error(f"Error getting top malicious IPs: {e}")
@@ -178,7 +178,7 @@ def get_geolocation_data():
             Q(type="ip") & Q(classification__in=["Malicious", "Suspicious"])
         )
         
-        logger.info(f"🌍 Geolocation: Analyzing {malicious_ips.count()} malicious/suspicious IPs")
+        logger.info(f" Geolocation: Analyzing {malicious_ips.count()} malicious/suspicious IPs")
         
         country_counts = Counter()
         ips_without_geo = []
@@ -234,16 +234,16 @@ def get_geolocation_data():
                 'count': count
             })
         
-        logger.info(f"   Geographic data: {len(geo_data)} countries found")
-        logger.info(f"   Top countries: {dict(country_counts.most_common(5))}")
+        logger.info(f" Geographic data: {len(geo_data)} countries found")
+        logger.info(f" Top countries: {dict(country_counts.most_common(5))}")
         if len(ips_without_geo) > 0:
-            logger.warning(f"   ⚠️ {len(ips_without_geo)} IPs without geolocation data: {ips_without_geo[:5]}")
+            logger.warning(f" {len(ips_without_geo)} IPs without geolocation data: {ips_without_geo[:5]}")
         
         if len(geo_data) == 0:
-            logger.warning("   ℹ️ No geographic data available. This is normal if:")
-            logger.warning("      1. No malicious IPs have been scanned yet")
-            logger.warning("      2. Shodan/VT didn't return country information")
-            logger.warning("      3. All scanned IPs are classified as Benign")
+            logger.warning(" No geographic data available. This is normal if:")
+            logger.warning(" 1. No malicious IPs have been scanned yet")
+            logger.warning(" 2. Shodan/VT didn't return country information")
+            logger.warning(" 3. All scanned IPs are classified as Benign")
         
         return geo_data
     except Exception as e:

@@ -10,7 +10,7 @@ import hashlib
 import math
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 from datetime import datetime, timedelta
-import time  # Should already be there
+import time # Should already be there
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 
 from app.enrichment import enrich_threat_intelligence
@@ -36,25 +36,25 @@ from app.scraper import google_cse_search
 from app.vt_shodan_api import vt_lookup_domain, vt_lookup_ip, vt_lookup_url, shodan_lookup
 from app.otx_api import otx_lookup
 
-# ✅ Import Unified Orchestrator
+# Import Unified Orchestrator
 from app.orchestrator import (
     orchestrate_threat_intelligence,
     detect_input_type as orchestrator_detect_type,
     format_results_for_template as orchestrator_format_results
 )
 
-# ✅ INITIALIZE LOGGER
+# INITIALIZE LOGGER
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 # Use improved ML model
 try:
     from app.ml_model_improved import classify_threat, classify_threat_with_details
-    logger.info("✅ Using improved ML model with TF-IDF and SMOTE")
+    logger.info(" Using improved ML model with TF-IDF and SMOTE")
 except ImportError:
     from app.ml_model import classify_threat
     classify_threat_with_details = None
-    logger.warning("⚠️ Falling back to legacy ML model")
+    logger.warning(" Falling back to legacy ML model")
 
 from app.forms import InputForm, LoginForm, SignupForm
 from app.models import User, IOCResult, Feedback
@@ -72,10 +72,10 @@ from openpyxl.styles import Font, Alignment, PatternFill
 try:
     import numpy as np
     NUMPY_INT_TYPES = (np.integer,)
-except ImportError:  # numpy is optional at runtime
+except ImportError: # numpy is optional at runtime
     NUMPY_INT_TYPES = tuple()
 
-# ✅ CACHE SETUP
+# CACHE SETUP
 CACHE = {}
 CACHE_DURATION = timedelta(hours=1)
 
@@ -85,7 +85,7 @@ def get_cached_result(ioc_value):
     if cache_key in CACHE:
         cached_data, timestamp = CACHE[cache_key]
         if datetime.utcnow() - timestamp < CACHE_DURATION:
-            logger.info(f"✅ Cache HIT for {ioc_value}")
+            logger.info(f" Cache HIT for {ioc_value}")
             return cached_data
     return None
 
@@ -93,7 +93,7 @@ def set_cached_result(ioc_value, data):
     """Cache scan result"""
     cache_key = hashlib.md5(ioc_value.encode()).hexdigest()
     CACHE[cache_key] = (data, datetime.utcnow())
-    logger.info(f"💾 Cached result for {ioc_value}")
+    logger.info(f" Cached result for {ioc_value}")
 
 
 MAX_MONGO_INT = (1 << 63) - 1
@@ -101,7 +101,7 @@ MAX_MONGO_INT = (1 << 63) - 1
 
 def _sanitize_scalar(value):
     """Normalize scalars so MongoDB can store them safely."""
-    if isinstance(value, bool):  # bool is a subclass of int, keep as-is
+    if isinstance(value, bool): # bool is a subclass of int, keep as-is
         return value
 
     if isinstance(value, NUMPY_INT_TYPES):
@@ -127,7 +127,7 @@ def sanitize_for_mongo(data):
     return _sanitize_scalar(data)
 
 
-# ✅ PARALLEL API FETCHER
+# PARALLEL API FETCHER
 def fetch_all_threat_data(user_input, ioc_type):
     """
     Fetch all API data in PARALLEL with detailed logging
@@ -139,71 +139,71 @@ def fetch_all_threat_data(user_input, ioc_type):
         'scraped_data': []
     }
     
-    logger.info(f"📡 Fetching threat data for {ioc_type}: {user_input}")
+    logger.info(f" Fetching threat data for {ioc_type}: {user_input}")
     
     with ThreadPoolExecutor(max_workers=4) as executor:
         futures = {}
         
         # Submit all API calls SIMULTANEOUSLY
-        logger.info("   Submitting OTX lookup...")
+        logger.info(" Submitting OTX lookup...")
         futures['otx'] = executor.submit(otx_lookup, user_input, ioc_type)
         
         if ioc_type == "ip":
-            logger.info("   Submitting VT IP lookup...")
+            logger.info(" Submitting VT IP lookup...")
             futures['vt'] = executor.submit(vt_lookup_ip, user_input)
-            logger.info("   Submitting Shodan lookup...")
+            logger.info(" Submitting Shodan lookup...")
             futures['shodan'] = executor.submit(shodan_lookup, user_input)
         elif ioc_type == "url":
-            logger.info("   Submitting VT URL lookup...")
+            logger.info(" Submitting VT URL lookup...")
             futures['vt'] = executor.submit(vt_lookup_url, user_input)
         elif ioc_type in ["domain", "hash"]:
-            logger.info("   Submitting VT domain/hash lookup...")
+            logger.info(" Submitting VT domain/hash lookup...")
             futures['vt'] = executor.submit(vt_lookup_domain, user_input)
         
         # Only scrape for keywords
         if ioc_type == "keyword":
-            logger.info("   Submitting Google CSE search...")
+            logger.info(" Submitting Google CSE search...")
             futures['scraped'] = executor.submit(google_cse_search, user_input)
         
         # Collect results with timeout protection
         for key, future in futures.items():
             try:
                 if key == 'vt':
-                    result = future.result(timeout=15)  # Increased timeout
+                    result = future.result(timeout=15) # Increased timeout
                     results['vt_data'] = result or {}
-                    logger.info(f"   ✅ VT returned: {len(str(result))} chars")
+                    logger.info(f" VT returned: {len(str(result))} chars")
                     if 'error' in results['vt_data']:
-                        logger.warning(f"   ⚠️ VT error: {results['vt_data']['error']}")
+                        logger.warning(f" VT error: {results['vt_data']['error']}")
                     
                 elif key == 'shodan':
                     result = future.result(timeout=15)
                     results['shodan_data'] = result or {}
-                    logger.info(f"   ✅ Shodan returned: {len(str(result))} chars")
+                    logger.info(f" Shodan returned: {len(str(result))} chars")
                     if 'error' in results['shodan_data']:
-                        logger.warning(f"   ⚠️ Shodan error: {results['shodan_data']['error']}")
+                        logger.warning(f" Shodan error: {results['shodan_data']['error']}")
                     
                 elif key == 'otx':
                     result = future.result(timeout=20)
                     results['otx_data'] = result or {}
-                    logger.info(f"   ✅ OTX returned: {len(str(result))} chars, classification: {result.get('classification', 'N/A')}")
+                    logger.info(f" OTX returned: {len(str(result))} chars, classification: {result.get('classification', 'N/A')}")
                     if 'error' in results['otx_data']:
-                        logger.warning(f"   ⚠️ OTX error: {results['otx_data']['error']}")
+                        logger.warning(f" OTX error: {results['otx_data']['error']}")
                     
                 elif key == 'scraped':
                     result = future.result(timeout=20)
                     results['scraped_data'] = result or []
-                    logger.info(f"   ✅ Scraped {len(results['scraped_data'])} results")
+                    logger.info(f" Scraped {len(results['scraped_data'])} results")
                     
             except TimeoutError:
-                logger.error(f"   ❌ {key} API TIMEOUT after waiting")
+                logger.error(f" {key} API TIMEOUT after waiting")
             except Exception as e:
-                logger.error(f"   ❌ {key} API ERROR: {e}", exc_info=True)
+                logger.error(f" {key} API ERROR: {e}", exc_info=True)
     
     # Log final results summary
-    logger.info(f"📊 API Summary:")
-    logger.info(f"   VT data: {'✅ OK' if results['vt_data'] and 'error' not in results['vt_data'] else '❌ Failed'}")
-    logger.info(f"   Shodan data: {'✅ OK' if results['shodan_data'] and 'error' not in results['shodan_data'] else '❌ Failed'}")
-    logger.info(f"   OTX data: {'✅ OK' if results['otx_data'] and 'error' not in results['otx_data'] else '❌ Failed'}")
+    logger.info(f" API Summary:")
+    logger.info(f" VT data: {' OK' if results['vt_data'] and 'error' not in results['vt_data'] else ' Failed'}")
+    logger.info(f" Shodan data: {' OK' if results['shodan_data'] and 'error' not in results['shodan_data'] else ' Failed'}")
+    logger.info(f" OTX data: {' OK' if results['otx_data'] and 'error' not in results['otx_data'] else ' Failed'}")
     
     return results
 
@@ -352,7 +352,7 @@ def format_google_for_display(scraped_data):
         
         # Domain analysis
         'total_domains': len(unique_domains),
-        'unique_domains': unique_domains[:10],  # Top 10 domains
+        'unique_domains': unique_domains[:10], # Top 10 domains
         
         # Content analysis
         'threat_indicators': threat_indicators[:10],
@@ -389,7 +389,7 @@ def classify_keyword_from_google(google_formatted):
     
     # Use Google threat score as fallback
     if threat_score >= 60 or len(threat_indicators) >= 5:
-        return "Suspicious"  # Conservative - need OTX confirmation for "Malicious"
+        return "Suspicious" # Conservative - need OTX confirmation for "Malicious"
     elif threat_score >= 30 or len(threat_indicators) >= 3:
         return "Informational"
     else:
@@ -449,28 +449,28 @@ def index():
 
         ioc_type = detect_ioc_type(user_input)
         
-        # ✅ LOG SCAN REQUEST
+        # LOG SCAN REQUEST
         logger.info(f"\n{'='*80}")
-        logger.info(f"📡 SCAN REQUEST (via /index)")
-        logger.info(f"   User: {session.get('username', 'Anonymous')}")
-        logger.info(f"   Input: {user_input}")
-        logger.info(f"   Type: {ioc_type}")
+        logger.info(f" SCAN REQUEST (via /index)")
+        logger.info(f" User: {session.get('username', 'Anonymous')}")
+        logger.info(f" Input: {user_input}")
+        logger.info(f" Type: {ioc_type}")
         logger.info(f"{'='*80}\n")
         
-        # ✅ CHECK CACHE FIRST
+        # CHECK CACHE FIRST
         cached = get_cached_result(user_input)
         if cached:
-            logger.info("💾 Returning cached results")
+            logger.info(" Returning cached results")
             flash("Results loaded from cache (scanned recently)", "info")
             return render_template("results.html", results=cached['results'], chart_data=cached['chart_data'])
         
-        # ✅ FETCH ALL APIs IN PARALLEL
-        logger.info(f"🚀 Starting PARALLEL API fetch for {ioc_type}: {user_input}")
+        # FETCH ALL APIs IN PARALLEL
+        logger.info(f" Starting PARALLEL API fetch for {ioc_type}: {user_input}")
         start_time = datetime.utcnow()
         
         
-        # ✅ OPTIMIZED: Skip OTX on initial load, fetch via AJAX
-        logger.info(f"🚀 Starting FAST API fetch (VT + Shodan + AbuseIPDB)")
+        # OPTIMIZED: Skip OTX on initial load, fetch via AJAX
+        logger.info(f" Starting FAST API fetch (VT + Shodan + AbuseIPDB)")
         start_time = datetime.utcnow()
 
 # Fetch only VT, Shodan, AbuseIPDB and Google (skip OTX)
@@ -479,29 +479,29 @@ def index():
 
             # VirusTotal
             if ioc_type == "ip":
-                logger.info("   📌 Submitting VT IP lookup...")
+                logger.info(" Submitting VT IP lookup...")
                 futures['vt'] = executor.submit(vt_lookup_ip, user_input)
             elif ioc_type == "url":
-                logger.info("   📌 Submitting VT URL lookup...")
+                logger.info(" Submitting VT URL lookup...")
                 futures['vt'] = executor.submit(vt_lookup_url, user_input)
             elif ioc_type in ["domain", "hash"]:
-                logger.info("   📌 Submitting VT domain/hash lookup...")
+                logger.info(" Submitting VT domain/hash lookup...")
                 futures['vt'] = executor.submit(vt_lookup_domain, user_input)
 
             # Shodan (only for IPs)
             if ioc_type == "ip":
-                logger.info("   📌 Submitting Shodan lookup...")
+                logger.info(" Submitting Shodan lookup...")
                 futures['shodan'] = executor.submit(shodan_lookup, user_input)
                 
             # AbuseIPDB (only for IPs)
             if ioc_type == "ip":
-                logger.info("   📌 Submitting AbuseIPDB lookup...")
+                logger.info(" Submitting AbuseIPDB lookup...")
                 from app.abuseipdb_api import abuseipdb_lookup
                 futures['abuseipdb'] = executor.submit(abuseipdb_lookup, user_input)
 
             # Google (only for keywords)
             if ioc_type == "keyword":
-                logger.info("   📌 Submitting Google CSE search...")
+                logger.info(" Submitting Google CSE search...")
                 futures['google'] = executor.submit(google_cse_search, user_input)
 
             # Collect results with timeout
@@ -514,43 +514,43 @@ def index():
                 try:
                     if key == 'vt':
                         vt_data = future.result(timeout=15) or {}
-                        logger.info(f"   ✅ VT result: {len(str(vt_data))} chars")
+                        logger.info(f" VT result: {len(str(vt_data))} chars")
                     elif key == 'shodan':
                         shodan_data = future.result(timeout=15) or {}
-                        logger.info(f"   ✅ Shodan result: {len(str(shodan_data))} chars")
+                        logger.info(f" Shodan result: {len(str(shodan_data))} chars")
                     elif key == 'abuseipdb':
                         abuseipdb_data = future.result(timeout=15) or {}
-                        logger.info(f"   ✅ AbuseIPDB result: {len(str(abuseipdb_data))} chars")
+                        logger.info(f" AbuseIPDB result: {len(str(abuseipdb_data))} chars")
                     elif key == 'google':
                         scraped_data = future.result(timeout=20) or []
-                        logger.info(f"   ✅ Google CSE: {len(scraped_data)} results")
+                        logger.info(f" Google CSE: {len(scraped_data)} results")
                 except Exception as e:
-                    logger.error(f"   ❌ Error fetching {key}: {e}")
+                    logger.error(f" Error fetching {key}: {e}")
 
-# ✅ OTX will be loaded via AJAX
-        otx_data = {'loading': True}  # Placeholder
+# OTX will be loaded via AJAX
+        otx_data = {'loading': True} # Placeholder
 
         elapsed = (datetime.utcnow() - start_time).total_seconds()
-        logger.info(f"⏱️ Fast API fetch completed in {elapsed:.2f} seconds (OTX will load via AJAX)")
-        logger.info(f"\n📊 API Results Summary:")
-        logger.info(f"   VT: {'✅ OK' if vt_data and 'error' not in vt_data else '❌ Failed'}")
-        logger.info(f"   Shodan: {'✅ OK' if shodan_data and 'error' not in shodan_data else '❌ Failed'}")
-        logger.info(f"   AbuseIPDB: {'✅ OK' if abuseipdb_data and 'error' not in abuseipdb_data else '❌ Failed'}")
-        logger.info(f"   Google CSE: {'✅ OK' if scraped_data else '❌ Failed'}\n")
+        logger.info(f" Fast API fetch completed in {elapsed:.2f} seconds (OTX will load via AJAX)")
+        logger.info(f"\n API Results Summary:")
+        logger.info(f" VT: {' OK' if vt_data and 'error' not in vt_data else ' Failed'}")
+        logger.info(f" Shodan: {' OK' if shodan_data and 'error' not in shodan_data else ' Failed'}")
+        logger.info(f" AbuseIPDB: {' OK' if abuseipdb_data and 'error' not in abuseipdb_data else ' Failed'}")
+        logger.info(f" Google CSE: {' OK' if scraped_data else ' Failed'}\n")
         
     
         
         # ML Classification (fast)
         # ML Classification
-# ✅    # ✅ SKIP ML classification on initial load - will be done via AJAX after OTX loads
+# # SKIP ML classification on initial load - will be done via AJAX after OTX loads
         classification = None # Placeholder
         
-        # ✅ CRITICAL: Skip AI enrichment entirely on page load
+        # CRITICAL: Skip AI enrichment entirely on page load
         # It will be loaded via AJAX after results page renders
-        enrichment = None  # ← Don't even set a placeholder
+        enrichment = None # ← Don't even set a placeholder
         
         # Save to MongoDB
-        logger.info("💾 Saving results to MongoDB...")
+        logger.info(" Saving results to MongoDB...")
         user_ref = None
         if session.get("user_id"):
             try:
@@ -571,13 +571,13 @@ def index():
             abuseipdb_report=abuseipdb_for_db,
             otx_report={'loading': True},
             scraped_data=scraped_for_db,
-            classification=None,  # ← Will be populated by AJAX
-            enrichment_context=None,  # ← Will be populated by AJAX
+            classification=None, # ← Will be populated by AJAX
+            enrichment_context=None, # ← Will be populated by AJAX
             user_id=user_ref,
             timestamp=datetime.utcnow()
         )
         ioc_result.save()
-        logger.info(f"✅ Saved to MongoDB with ID: {ioc_result.id}")
+        logger.info(f" Saved to MongoDB with ID: {ioc_result.id}")
 
         # Chart Data
         chart_data = {
@@ -597,11 +597,11 @@ def index():
             "vt": vt_data,
             "shodan": shodan_data,
             "abuseipdb": abuseipdb_data,
-            "otx": otx_data,  # Will be {'loading': True}
-            "otx_formatted": None,  # Will be loaded via AJAX
+            "otx": otx_data, # Will be {'loading': True}
+            "otx_formatted": None, # Will be loaded via AJAX
             "scraped": scraped_data,
             "google_formatted": format_google_for_display(scraped_data) if scraped_data else None,
-            "classification": classification,  # Will be "Loading..."
+            "classification": classification, # Will be "Loading..."
             "enrichment": None
         }
         
@@ -612,7 +612,7 @@ def index():
         })
         
         total_time = (datetime.utcnow() - start_time).total_seconds()
-        logger.info(f"✅ Page rendered in {total_time:.2f} seconds (enrichment will load via AJAX)")
+        logger.info(f" Page rendered in {total_time:.2f} seconds (enrichment will load via AJAX)")
 
         return render_template("results.html", results=results, chart_data=json.dumps(chart_data))
     
@@ -620,13 +620,13 @@ def index():
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 🚀 UNIFIED THREAT INTELLIGENCE ENDPOINT
+# UNIFIED THREAT INTELLIGENCE ENDPOINT
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 @main_bp.route("/scan", methods=["GET", "POST"])
 @login_required
 def scan_unified():
     """
-    🎯 UNIFIED THREAT INTELLIGENCE ORCHESTRATOR
+     UNIFIED THREAT INTELLIGENCE ORCHESTRATOR
     
     This endpoint orchestrates ALL threat intelligence modules:
     - Automatic input detection (IP, URL, domain, hash, keyword)
@@ -653,9 +653,9 @@ def scan_unified():
             return redirect(url_for("main.scan_unified"))
         
         logger.info(f"\n{'='*80}")
-        logger.info(f"🎯 UNIFIED SCAN REQUEST")
-        logger.info(f"   User: {session.get('username', 'Anonymous')}")
-        logger.info(f"   Input: {user_input}")
+        logger.info(f" UNIFIED SCAN REQUEST")
+        logger.info(f" User: {session.get('username', 'Anonymous')}")
+        logger.info(f" Input: {user_input}")
         logger.info(f"{'='*80}\n")
         
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -663,11 +663,11 @@ def scan_unified():
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         cached = get_cached_result(user_input)
         if cached:
-            logger.info("💾 Returning cached results")
+            logger.info(" Returning cached results")
             flash("Results loaded from cache (scanned recently)", "info")
             return render_template(
                 "results.html",
-            # Fetch only VT, Shodan, AbuseIPDB and Google (skip OTX)        
+            # Fetch only VT, Shodan, AbuseIPDB and Google (skip OTX) 
                 chart_data=cached.get('chart_data', '{}')
             )
         
@@ -677,7 +677,7 @@ def scan_unified():
         try:
             orchestrated_data = orchestrate_threat_intelligence(user_input)
         except Exception as e:
-            logger.error(f"❌ Orchestration failed: {e}", exc_info=True)
+            logger.error(f" Orchestration failed: {e}", exc_info=True)
             flash(f"Error analyzing threat: {str(e)}", "danger")
             return redirect(url_for("main.scan_unified"))
         
@@ -705,7 +705,7 @@ def scan_unified():
             timestamp=datetime.utcnow()
         )
         ioc_result.save()
-        logger.info(f"💾 Saved to MongoDB with ID: {ioc_result.id}")
+        logger.info(f" Saved to MongoDB with ID: {ioc_result.id}")
         
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         # STEP 4: Format Results for Template
@@ -752,13 +752,13 @@ def scan_unified():
         # STEP 6: Render Results
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         logger.info(f"\n{'='*80}")
-        logger.info(f"✅ UNIFIED ANALYSIS COMPLETE")
-        logger.info(f"   Input Type: {orchestrated_data.get('input_type')}")
-        logger.info(f"   Classification: {template_data.get('classification')}")
-        logger.info(f"   Total Time: {orchestrated_data.get('timing', {}).get('pipeline_total', 'N/A')}")
-        logger.info(f"   Errors: {len(orchestrated_data.get('errors', []))}")
+        logger.info(f" UNIFIED ANALYSIS COMPLETE")
+        logger.info(f" Input Type: {orchestrated_data.get('input_type')}")
+        logger.info(f" Classification: {template_data.get('classification')}")
+        logger.info(f" Total Time: {orchestrated_data.get('timing', {}).get('pipeline_total', 'N/A')}")
+        logger.info(f" Errors: {len(orchestrated_data.get('errors', []))}")
         if orchestrated_data.get('classification_details'):
-            logger.info(f"   ML Confidence: {orchestrated_data['classification_details'].get('model_confidence', 'N/A')}")
+            logger.info(f" ML Confidence: {orchestrated_data['classification_details'].get('model_confidence', 'N/A')}")
         logger.info(f"{'='*80}\n")
         
         if orchestrated_data.get('errors'):
@@ -777,7 +777,7 @@ def scan_unified():
 
 
 
-# ✅ NEW: AJAX Endpoint for Lazy Loading OTX Data
+# NEW: AJAX Endpoint for Lazy Loading OTX Data
 @main_bp.route("/api/otx/<ioc_id>", methods=["GET"])
 @login_required
 def get_otx_data(ioc_id):
@@ -786,7 +786,7 @@ def get_otx_data(ioc_id):
     """
     try:
         logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        logger.info(f"🔄 AJAX: /api/otx/{ioc_id} CALLED")
+        logger.info(f" AJAX: /api/otx/{ioc_id} CALLED")
         logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         ioc_result = IOCResult.objects.get(id=ioc_id)
         
@@ -795,7 +795,7 @@ def get_otx_data(ioc_id):
         
         # If already loaded and not timed out, return cached
         if otx_data and 'timeout' not in otx_data and 'error' not in otx_data and otx_data.get('source_count', 0) > 0:
-            logger.info(f"✅ Returning cached OTX data for {ioc_id}")
+            logger.info(f" Returning cached OTX data for {ioc_id}")
             return jsonify({
                 'status': 'complete',
                 'otx_data': otx_data,
@@ -803,7 +803,7 @@ def get_otx_data(ioc_id):
             })
         
         # Generate OTX data now
-        logger.info(f"🔄 Fetching OTX data for {ioc_id}")
+        logger.info(f" Fetching OTX data for {ioc_id}")
         
         # Fetch with extended timeout for keywords
         from app.otx_api import otx_lookup
@@ -821,7 +821,7 @@ def get_otx_data(ioc_id):
             try:
                 otx_data = future.result(timeout=otx_timeout)
             except FutureTimeoutError:
-                logger.warning(f"⏱️ OTX timeout after {otx_timeout}s for {ioc_id} ({ioc_result.type})")
+                logger.warning(f" OTX timeout after {otx_timeout}s for {ioc_id} ({ioc_result.type})")
                 otx_data = {
                     'error': 'OTX request timeout',
                     'timeout': True,
@@ -833,7 +833,7 @@ def get_otx_data(ioc_id):
         ioc_result.otx_report = sanitize_for_mongo(otx_data)
         ioc_result.save()
         
-        logger.info(f"✅ OTX data fetched for {ioc_id}")
+        logger.info(f" OTX data fetched for {ioc_id}")
         
         sanitized_otx = sanitize_for_mongo(otx_data)
 
@@ -844,14 +844,14 @@ def get_otx_data(ioc_id):
         })
     
     except Exception as e:
-        logger.error(f"❌ OTX fetch error: {e}", exc_info=True)
+        logger.error(f" OTX fetch error: {e}", exc_info=True)
         return jsonify({
             'status': 'error',
             'error': str(e)
         }), 500
 
 
-# ✅ NEW: AJAX Endpoint for ML Classification (after OTX loads)
+# NEW: AJAX Endpoint for ML Classification (after OTX loads)
 @main_bp.route("/api/classify/<ioc_id>", methods=["GET"])
 @login_required
 def get_classification(ioc_id):
@@ -863,14 +863,14 @@ def get_classification(ioc_id):
         
         # Check if classification already exists
         if ioc_result.classification and ioc_result.classification not in [None, 'Unknown', 'Loading...', 'Pending']:
-            logger.info(f"✅ Returning cached classification for {ioc_id}: {ioc_result.classification}")
+            logger.info(f" Returning cached classification for {ioc_id}: {ioc_result.classification}")
             return jsonify({
                 'status': 'complete',
                 'classification': ioc_result.classification
             })
         
         # Run classification now
-        logger.info(f"🤖 Running ML classification for {ioc_id}")
+        logger.info(f" Running ML classification for {ioc_id}")
         
         # Get all data
         vt_data = ioc_result.vt_report or {}
@@ -897,38 +897,38 @@ def get_classification(ioc_id):
             
             # Log comprehensive details
             logger.info(f"\n{'='*80}")
-            logger.info(f"📊 DETAILED CLASSIFICATION RESULTS")
+            logger.info(f" DETAILED CLASSIFICATION RESULTS")
             logger.info(f"{'='*80}")
             logger.info(f"Input: {ioc_result.input_value} ({ioc_result.type})")
             logger.info(f"Final Classification: {classification}")
-            logger.info(f"\n🤖 Model Metrics:")
-            logger.info(f"   Confidence: {details.get('model_confidence', 0):.2%}")
-            logger.info(f"   Threshold Met (0.75): {details.get('confidence_threshold_met', False)}")
+            logger.info(f"\n Model Metrics:")
+            logger.info(f" Confidence: {details.get('model_confidence', 0):.2%}")
+            logger.info(f" Threshold Met (0.75): {details.get('confidence_threshold_met', False)}")
             
             if 'api_scores' in details:
                 api_scores = details['api_scores']
-                logger.info(f"\n📡 API Scores:")
-                logger.info(f"   VirusTotal: {api_scores.get('vt_score', 0):.1f}/100")
-                logger.info(f"   OTX: {api_scores.get('otx_score', 0):.1f}/100")
-                logger.info(f"   Shodan: {api_scores.get('shodan_score', 0):.1f}/100")
-                logger.info(f"   AbuseIPDB: {api_scores.get('abuseipdb_score', 0):.1f}/100")
-                logger.info(f"   Weighted Total: {api_scores.get('weighted_total', 0):.1f}/100")
-                logger.info(f"   Weights: VT={api_scores.get('weights_used', {}).get('vt', 0):.0%}, "
+                logger.info(f"\n API Scores:")
+                logger.info(f" VirusTotal: {api_scores.get('vt_score', 0):.1f}/100")
+                logger.info(f" OTX: {api_scores.get('otx_score', 0):.1f}/100")
+                logger.info(f" Shodan: {api_scores.get('shodan_score', 0):.1f}/100")
+                logger.info(f" AbuseIPDB: {api_scores.get('abuseipdb_score', 0):.1f}/100")
+                logger.info(f" Weighted Total: {api_scores.get('weighted_total', 0):.1f}/100")
+                logger.info(f" Weights: VT={api_scores.get('weights_used', {}).get('vt', 0):.0%}, "
                           f"OTX={api_scores.get('weights_used', {}).get('otx', 0):.0%}, "
                           f"Shodan={api_scores.get('weights_used', {}).get('shodan', 0):.0%}, "
                           f"AbuseIPDB={api_scores.get('weights_used', {}).get('abuseipdb', 0):.0%}")
             
             if 'context_analysis' in details:
                 context = details['context_analysis']
-                logger.info(f"\n🧠 Context Analysis:")
-                logger.info(f"   Benign patterns found: {context.get('benign_score', 0)}")
-                logger.info(f"   Malicious patterns found: {context.get('malicious_score', 0)}")
-                logger.info(f"   Is benign context: {context.get('is_benign_context', False)}")
-                logger.info(f"   Is malicious context: {context.get('is_malicious_context', False)}")
+                logger.info(f"\n Context Analysis:")
+                logger.info(f" Benign patterns found: {context.get('benign_score', 0)}")
+                logger.info(f" Malicious patterns found: {context.get('malicious_score', 0)}")
+                logger.info(f" Is benign context: {context.get('is_benign_context', False)}")
+                logger.info(f" Is malicious context: {context.get('is_malicious_context', False)}")
             
-            logger.info(f"\n📋 Reasoning:")
+            logger.info(f"\n Reasoning:")
             for reason in details.get('reasoning', []):
-                logger.info(f"   - {reason}")
+                logger.info(f" - {reason}")
             logger.info(f"{'='*80}\n")
             
             # Store detailed results in enrichment context
@@ -948,14 +948,14 @@ def get_classification(ioc_id):
             )
         
         # Save to database
-        logger.info(f"💾 Saving classification to database...")
+        logger.info(f" Saving classification to database...")
         ioc_result.classification = classification
         ioc_result.save()
-        logger.info(f"✅ Classification SAVED to database: {classification}")
+        logger.info(f" Classification SAVED to database: {classification}")
 
-    # ✅ Verify it was saved
+    # Verify it was saved
         ioc_result.reload()
-        logger.info(f"✅ Verified in DB: {ioc_result.classification}")
+        logger.info(f" Verified in DB: {ioc_result.classification}")
         
         return jsonify({
             'status': 'complete',
@@ -963,44 +963,44 @@ def get_classification(ioc_id):
         })
     
     except Exception as e:
-        logger.error(f"❌ Classification error: {e}", exc_info=True)
+        logger.error(f" Classification error: {e}", exc_info=True)
         return jsonify({
             'status': 'error',
             'error': str(e)
         }), 500
-# ✅ NEW: AJAX Endpoint for Lazy Loading Enrichment
+# NEW: AJAX Endpoint for Lazy Loading Enrichment
 @main_bp.route("/api/enrichment/<ioc_id>", methods=["GET"])
 @login_required
 def get_enrichment(ioc_id):
     """AJAX endpoint to load AI enrichment after page renders"""
     try:
         logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        logger.info(f"🧠 AJAX: /api/enrichment/{ioc_id} CALLED")
+        logger.info(f" AJAX: /api/enrichment/{ioc_id} CALLED")
         logger.info(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         
         ioc_result = IOCResult.objects.get(id=ioc_id)
         
-        logger.info(f"📊 Current IOC state:")
-        logger.info(f"   Classification: {ioc_result.classification}")
-        logger.info(f"   Has OTX data: {bool(ioc_result.otx_report)}")
-        logger.info(f"   Has enrichment: {bool(ioc_result.enrichment_context)}")
+        logger.info(f" Current IOC state:")
+        logger.info(f" Classification: {ioc_result.classification}")
+        logger.info(f" Has OTX data: {bool(ioc_result.otx_report)}")
+        logger.info(f" Has enrichment: {bool(ioc_result.enrichment_context)}")
         
-        # ✅ CRITICAL: Check if classification is valid
+        # CRITICAL: Check if classification is valid
         if not ioc_result.classification or ioc_result.classification in ['Loading...', None, 'Unknown', 'Pending', '']:
             current_cls = ioc_result.classification or 'None'
-            logger.warning(f"⚠️ ⚠️ ⚠️ Classification NOT ready: '{current_cls}' - Returning 400")
+            logger.warning(f" Classification NOT ready: '{current_cls}' - Returning 400")
             return jsonify({
                 'status': 'waiting',
                 'error': f'Classification is {current_cls}. Waiting for ML analysis to complete.',
                 'current_classification': current_cls
             }), 400
         
-        logger.info(f"✅ Classification is VALID: {ioc_result.classification}")
+        logger.info(f" Classification is VALID: {ioc_result.classification}")
         
         # Check if enrichment already exists
         enrichment = ioc_result.enrichment_context or {}
         
-        # ✅ If enrichment exists but contains invalid text, regenerate
+        # If enrichment exists but contains invalid text, regenerate
         if enrichment and not enrichment.get('loading'):
             summary = enrichment.get('summary', '')
             why_malicious = enrichment.get('why_malicious', '')
@@ -1013,24 +1013,24 @@ def get_enrichment(ioc_id):
             is_empty = not summary and not why_malicious and not enrichment.get('recommendation')
             
             if has_invalid:
-                logger.warning(f"⚠️ Enrichment contains invalid text (Pending/Loading), regenerating...")
-                enrichment = {}  # Force regeneration
+                logger.warning(f" Enrichment contains invalid text (Pending/Loading), regenerating...")
+                enrichment = {} # Force regeneration
             elif is_empty:
-                logger.warning(f"⚠️ Enrichment is empty, regenerating...")
-                enrichment = {}  # Force regeneration
+                logger.warning(f" Enrichment is empty, regenerating...")
+                enrichment = {} # Force regeneration
             else:
-                logger.info(f"✅ Returning cached enrichment for {ioc_id}")
-                logger.info(f"📦 Enrichment data keys: {list(enrichment.keys())}")
-                logger.info(f"   Summary: {enrichment.get('summary', 'N/A')[:100]}...")
-                logger.info(f"   Why Malicious: {enrichment.get('why_malicious', 'N/A')[:100]}...")
-                logger.info(f"   Recommendation: {enrichment.get('recommendation', 'N/A')[:100]}...")
+                logger.info(f" Returning cached enrichment for {ioc_id}")
+                logger.info(f" Enrichment data keys: {list(enrichment.keys())}")
+                logger.info(f" Summary: {enrichment.get('summary', 'N/A')[:100]}...")
+                logger.info(f" Why Malicious: {enrichment.get('why_malicious', 'N/A')[:100]}...")
+                logger.info(f" Recommendation: {enrichment.get('recommendation', 'N/A')[:100]}...")
                 return jsonify({
                     'status': 'complete',
                     'enrichment': enrichment
                 })
         
         # Generate enrichment now
-        logger.info(f"🔍 Generating fresh enrichment for {ioc_id}")
+        logger.info(f" Generating fresh enrichment for {ioc_id}")
         
         ENABLE_AI_ENRICHMENT = os.getenv('ENABLE_ENRICHMENT', 'true').lower() == 'true'
         
@@ -1053,9 +1053,9 @@ def get_enrichment(ioc_id):
                     future = executor.submit(generate_enrichment)
                     try:
                         enrichment = future.result(timeout=30)
-                        logger.info(f"✅ Enrichment generated successfully")
+                        logger.info(f" Enrichment generated successfully")
                     except FutureTimeoutError:
-                        logger.warning(f"⏱️ Enrichment timeout after 30s")
+                        logger.warning(f" Enrichment timeout after 30s")
                         enrichment = {
                             'summary': f'AI analysis timed out. This {ioc_result.type} was classified as {ioc_result.classification}.',
                             'why_malicious': f'This {ioc_result.type} was classified as {ioc_result.classification} based on threat intelligence data. AI-powered detailed analysis was unavailable due to timeout.',
@@ -1065,7 +1065,7 @@ def get_enrichment(ioc_id):
                         }
                         
             except Exception as e:
-                logger.error(f"❌ Enrichment generation error: {e}", exc_info=True)
+                logger.error(f" Enrichment generation error: {e}", exc_info=True)
                 enrichment = {
                     'summary': f'This {ioc_result.type} was classified as {ioc_result.classification}.',
                     'why_malicious': f'Classification: {ioc_result.classification}. AI analysis encountered an error.',
@@ -1087,7 +1087,7 @@ def get_enrichment(ioc_id):
         ioc_result.enrichment_context = enrichment
         ioc_result.save()
         
-        logger.info(f"💾 Enrichment saved to database for {ioc_id}")
+        logger.info(f" Enrichment saved to database for {ioc_id}")
         
         return jsonify({
             'status': 'complete',
@@ -1095,13 +1095,13 @@ def get_enrichment(ioc_id):
         })
     
     except IOCResult.DoesNotExist:
-        logger.error(f"❌ IOC {ioc_id} not found")
+        logger.error(f" IOC {ioc_id} not found")
         return jsonify({
             'status': 'error',
             'error': 'IOC not found'
         }), 404
     except Exception as e:
-        logger.error(f"❌ Enrichment API error for {ioc_id}: {e}", exc_info=True)
+        logger.error(f" Enrichment API error for {ioc_id}: {e}", exc_info=True)
         return jsonify({
             'status': 'error',
             'error': str(e)
@@ -1135,7 +1135,7 @@ def export(format, ioc_id):
     except Exception as e:
         return jsonify({"error": f"Result not found: {str(e)}"}), 404
     
-    # ✅ Get enrichment data (trigger generation if needed)
+    # Get enrichment data (trigger generation if needed)
     enrichment = result.enrichment_context
     if not enrichment or enrichment.get('loading'):
         # Try to generate it now for export
@@ -1226,7 +1226,7 @@ def export(format, ioc_id):
         
         # AI Analysis Section
         writer.writerow(["━" * 80])
-        writer.writerow(["🤖 AI THREAT ANALYSIS"])
+        writer.writerow([" AI THREAT ANALYSIS"])
         writer.writerow(["━" * 80])
         writer.writerow([])
         
@@ -1246,9 +1246,9 @@ def export(format, ioc_id):
         indicators = enrichment.get('key_indicators', [])
         if indicators:
             for idx, indicator in enumerate(indicators, 1):
-                writer.writerow([f"  {idx}.", indicator])
+                writer.writerow([f" {idx}.", indicator])
         else:
-            writer.writerow(["  No specific indicators identified"])
+            writer.writerow([" No specific indicators identified"])
         writer.writerow([])
         
         writer.writerow(["Recommended Action"])
@@ -1318,7 +1318,7 @@ def export(format, ioc_id):
                 writer.writerow([])
                 writer.writerow(["Category Breakdown"])
                 for name, count in categories.items():
-                    writer.writerow([f"  • {name}", f"{count} reports"])
+                    writer.writerow([f" • {name}", f"{count} reports"])
         else:
             writer.writerow(["No AbuseIPDB data available or lookup not applicable"])
         writer.writerow([])
@@ -1338,21 +1338,21 @@ def export(format, ioc_id):
                 writer.writerow([])
                 writer.writerow(["Threat Indicators"])
                 for indicator in threat_indicators:
-                    writer.writerow([f"  • {indicator}"])
+                    writer.writerow([f" • {indicator}"])
 
             safe_indicators = google_formatted.get('safe_indicators', [])
             if safe_indicators:
                 writer.writerow([])
                 writer.writerow(["Safe Indicators"])
                 for indicator in safe_indicators:
-                    writer.writerow([f"  • {indicator}"])
+                    writer.writerow([f" • {indicator}"])
 
             domains = google_formatted.get('unique_domains', [])
             if domains:
                 writer.writerow([])
                 writer.writerow(["Notable Domains"])
                 for domain in domains[:10]:
-                    writer.writerow([f"  • {domain}"])
+                    writer.writerow([f" • {domain}"])
 
             top_results = google_formatted.get('top_results', [])
             if top_results:
@@ -1410,9 +1410,7 @@ def export(format, ioc_id):
     elif format == "excel":
         wb = openpyxl.Workbook()
         
-        # ============================================
         # WORKSHEET 1: EXECUTIVE SUMMARY
-        # ============================================
         ws_summary = wb.active
         ws_summary.title = "Executive Summary"
         
@@ -1423,7 +1421,7 @@ def export(format, ioc_id):
         section_font = Font(bold=True, size=12, color="4cc9f0")
         
         # Title
-        ws_summary['A1'] = "🛡️ THREAT INTELLIGENCE REPORT"
+        ws_summary['A1'] = " THREAT INTELLIGENCE REPORT"
         ws_summary['A1'].font = title_font
         ws_summary.merge_cells('A1:D1')
         
@@ -1464,7 +1462,7 @@ def export(format, ioc_id):
         row += 1
         
         # AI Analysis
-        ws_summary[f'A{row}'] = "🤖 AI THREAT ANALYSIS"
+        ws_summary[f'A{row}'] = " AI THREAT ANALYSIS"
         ws_summary[f'A{row}'].font = section_font
         ws_summary.merge_cells(f'A{row}:D{row}')
         row += 1
@@ -1508,9 +1506,7 @@ def export(format, ioc_id):
         ws_summary.column_dimensions['C'].width = 20
         ws_summary.column_dimensions['D'].width = 20
         
-        # ============================================
         # WORKSHEET 2: DETAILED ANALYSIS
-        # ============================================
         ws_detail = wb.create_sheet("Detailed Analysis")
         
         row = 1
@@ -1543,9 +1539,7 @@ def export(format, ioc_id):
         ws_detail.column_dimensions['A'].width = 25
         ws_detail.column_dimensions['B'].width = 80
         
-        # ============================================
         # WORKSHEET 3: VIRUSTOTAL
-        # ============================================
         ws_vt = wb.create_sheet("VirusTotal")
         
         row = 1
@@ -1577,9 +1571,7 @@ def export(format, ioc_id):
         ws_vt.column_dimensions['A'].width = 30
         ws_vt.column_dimensions['B'].width = 20
         
-        # ============================================
         # WORKSHEET 4: SHODAN
-        # ============================================
         ws_shodan = wb.create_sheet("Shodan")
         
         row = 1
@@ -1616,9 +1608,7 @@ def export(format, ioc_id):
         ws_shodan.column_dimensions['A'].width = 30
         ws_shodan.column_dimensions['B'].width = 50
         
-        # ============================================
         # WORKSHEET 5: OTX
-        # ============================================
         ws_otx = wb.create_sheet("AlienVault OTX")
         
         row = 1
@@ -1666,9 +1656,7 @@ def export(format, ioc_id):
         ws_otx.column_dimensions['A'].width = 30
         ws_otx.column_dimensions['B'].width = 60
 
-        # ============================================
         # WORKSHEET 6: ABUSEIPDB
-        # ============================================
         ws_abuse = wb.create_sheet("AbuseIPDB")
         row = 1
         ws_abuse[f'A{row}'] = "ABUSEIPDB REPUTATION"
@@ -1714,9 +1702,7 @@ def export(format, ioc_id):
         ws_abuse.column_dimensions['A'].width = 35
         ws_abuse.column_dimensions['B'].width = 45
 
-        # ============================================
         # WORKSHEET 7: GOOGLE OSINT
-        # ============================================
         ws_google = wb.create_sheet("Google OSINT")
         row = 1
         ws_google[f'A{row}'] = "GOOGLE SEARCH INTELLIGENCE"
@@ -1843,7 +1829,7 @@ def export(format, ioc_id):
         )
         
         # Title
-        story.append(Paragraph("🛡️ THREAT INTELLIGENCE REPORT", title_style))
+        story.append(Paragraph(" THREAT INTELLIGENCE REPORT", title_style))
         story.append(Paragraph(f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}", subtitle_style))
         story.append(Spacer(1, 0.2*inch))
         
@@ -1875,7 +1861,7 @@ def export(format, ioc_id):
         story.append(Spacer(1, 0.3*inch))
         
         # AI Analysis Section
-        story.append(Paragraph("🤖 AI THREAT ANALYSIS", section_style))
+        story.append(Paragraph(" AI THREAT ANALYSIS", section_style))
         
         # Summary
         summary_style = ParagraphStyle(
@@ -1942,7 +1928,7 @@ def export(format, ioc_id):
         )
         
         rec_data = [
-            [Paragraph("<b>🛡️ RECOMMENDED ACTION</b>", styles['Heading3'])],
+            [Paragraph("<b> RECOMMENDED ACTION</b>", styles['Heading3'])],
             [Paragraph(recommendation, rec_style)]
         ]
         
@@ -2249,7 +2235,7 @@ def signup():
     
     form = SignupForm()
     if form.validate_on_submit():
-        # ✅ Email validation is handled by form validator
+        # Email validation is handled by form validator
         # No need to check here, form.validate_email() does it
         email_input = form.email.data.strip()
         existing_user = User.objects(email__iexact=email_input).first()

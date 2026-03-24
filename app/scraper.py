@@ -13,9 +13,7 @@ import certifi
 
 load_dotenv()
 
-# -------------------------
 # CONFIG
-# -------------------------
 REQUEST_TIMEOUT = 10
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -23,10 +21,10 @@ USER_AGENT = (
 )
 HEADERS = {"User-Agent": USER_AGENT}
 
-# ✅ SSL Configuration
+# SSL Configuration
 SSL_VERIFY = os.getenv("SSL_VERIFY", "false").lower() == "true"
 
-# ✅ Disable SSL warnings for development
+# Disable SSL warnings for development
 if not SSL_VERIFY:
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -60,14 +58,14 @@ def safe_get(url: str, params=None, headers=None) -> requests.Response:
             params=params, 
             headers=headers or HEADERS, 
             timeout=REQUEST_TIMEOUT,
-            verify=get_ssl_verify()  # ✅ Use SSL verification setting
+            verify=get_ssl_verify() # Use SSL verification setting
         )
         resp.raise_for_status()
         return resp
     except requests.exceptions.SSLError as e:
         LOGGER.warning("SSL Error for %s: %s (Try setting SSL_VERIFY=false in .env)", url, e)
         
-        # ✅ Retry without SSL verification for development
+        # Retry without SSL verification for development
         if not SSL_VERIFY:
             try:
                 resp = requests.get(
@@ -97,19 +95,19 @@ def safe_get(url: str, params=None, headers=None) -> requests.Response:
         return None
 
 
-def google_cse_search(query: str, num_results: int = 3) -> List[Dict]:  # ← Changed from 5 to 3
+def google_cse_search(query: str, num_results: int = 3) -> List[Dict]: # ← Changed from 5 to 3
     """
-    ✅ OPTIMIZED: Reduced results and timeout
+     OPTIMIZED: Reduced results and timeout
     """
     if not GOOGLE_API_KEY or not GOOGLE_CSE_ID:
-        return []  # ✅ Skip mock data to save time
+        return [] # Skip mock data to save time
 
     url = "https://www.googleapis.com/customsearch/v1"
     params = {
         "key": GOOGLE_API_KEY,
         "cx": GOOGLE_CSE_ID,
         "q": query,
-        "num": num_results,  # ✅ Only 3 results
+        "num": num_results, # Only 3 results
     }
 
     resp = safe_get(url, params=params)
@@ -119,7 +117,7 @@ def google_cse_search(query: str, num_results: int = 3) -> List[Dict]:  # ← Ch
         try:
             data = resp.json()
             for item in data.get("items", []):
-                page_content = item.get("snippet", "")  # ✅ Skip actual page scraping
+                page_content = item.get("snippet", "") # Skip actual page scraping
                 
                 results.append({
                     "title": item.get("title", "No title"),
@@ -129,7 +127,7 @@ def google_cse_search(query: str, num_results: int = 3) -> List[Dict]:  # ← Ch
                     "displayLink": item.get("displayLink", "")
                 })
                 
-                # ✅ No sleep needed - we're not scraping pages
+                # No sleep needed - we're not scraping pages
         except ValueError as json_error:
             LOGGER.error(f"Failed to parse Google CSE response: {json_error}")
     

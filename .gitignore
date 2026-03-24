@@ -60,3 +60,10 @@ exports/**/*.xlsx
 # Ignore temporary markdown notes but keep primary README files
 *.md
 !README.md
+*.docx
+*.pdf
+*.md  
+*.png
+*.txt
+*.pptx
+*.csv

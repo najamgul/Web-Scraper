@@ -1,43 +1,240 @@
 # app/ml_model_improved.py
 """
-IMPROVED Threat Classification System with Context-Aware ML Model
+IMPROVED Threat Classification System with Multi-Model ML Pipeline
 
 Features:
-- TF-IDF with bigrams for text analysis
-- SMOTE for dataset balancing
+- Dedicated ML models for each IOC type (keyword, URL, IP, domain, hash)
+- TF-IDF + Random Forest for keyword classification
+- XGBoost with lexical/structural/API features for URL/IP/domain/hash
 - Prediction confidence thresholds (0.75)
-- Weighted API scoring
+- Weighted API scoring as fallback
 - Context filtering for educational/preventive phrases
 - Detailed logging of confidence, API scores, and final labels
 """
 
 import joblib
 import os
+import math
 import logging
 import numpy as np
 import re
+from collections import Counter
 from typing import Dict, Tuple, Optional
 
 logger = logging.getLogger(__name__)
 
-# Load models and vectorizer
+# ═══════════════════════════════════════════════════════════════════════════════
+# LOAD ALL MODELS
+# ═══════════════════════════════════════════════════════════════════════════════
+
 _here = os.path.dirname(os.path.abspath(__file__))
-model_path = os.path.join(_here, "..", "rf_model_improved.pkl")
-vectorizer_path = os.path.join(_here, "..", "tfidf_vectorizer.pkl")
+_models_dir = os.path.join(_here, "..", "models")
 
-try:
-    model = joblib.load(model_path)
-    vectorizer = joblib.load(vectorizer_path)
-    logger.info("✅ Improved Random Forest model and TF-IDF vectorizer loaded successfully")
-except FileNotFoundError:
-    logger.warning("⚠️ Model files not found. Will create new ones.")
-    model = None
-    vectorizer = None
+def _load_model(name, fallback_path=None):
+    """Load a model from the models/ directory with optional fallback."""
+    path = os.path.join(_models_dir, name)
+    if os.path.exists(path):
+        return joblib.load(path)
+    if fallback_path and os.path.exists(fallback_path):
+        return joblib.load(fallback_path)
+    return None
+
+# Keyword model (TF-IDF + Random Forest)
+model = _load_model("keyword_model.pkl", os.path.join(_here, "..", "rf_model_improved.pkl"))
+vectorizer = _load_model("keyword_vectorizer.pkl", os.path.join(_here, "..", "tfidf_vectorizer.pkl"))
+
+# URL model (Lexical features + XGBoost)
+url_model = _load_model("url_model.pkl")
+url_scaler = _load_model("url_scaler.pkl")
+
+# IP model (API features + XGBoost)
+ip_model = _load_model("ip_model.pkl")
+ip_scaler = _load_model("ip_scaler.pkl")
+
+# Domain model (Structural features + XGBoost)
+domain_model = _load_model("domain_model.pkl")
+domain_scaler = _load_model("domain_scaler.pkl")
+
+# Hash model (API features + XGBoost)
+hash_model = _load_model("hash_model.pkl")
+hash_scaler = _load_model("hash_scaler.pkl")
+
+# Log what loaded
+_loaded = []
+if model and vectorizer: _loaded.append("keyword")
+if url_model and url_scaler: _loaded.append("url")
+if ip_model and ip_scaler: _loaded.append("ip")
+if domain_model and domain_scaler: _loaded.append("domain")
+if hash_model and hash_scaler: _loaded.append("hash")
+logger.info(f" Loaded ML models: {', '.join(_loaded) if _loaded else 'NONE'}")
 
 
-# ============================================
+# ═══════════════════════════════════════════════════════════════════════════════
+# FEATURE EXTRACTION FUNCTIONS (must match train_all_models.py)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+SUSPICIOUS_TLDS = [".xyz", ".top", ".buzz", ".click", ".link", ".tk", ".ml",
+                   ".ga", ".cf", ".gq", ".pw", ".cc", ".icu", ".club",
+                   ".work", ".site", ".online", ".fun", ".space", ".info"]
+BRAND_NAMES = ["paypal", "apple", "google", "amazon", "microsoft",
+               "netflix", "facebook", "instagram", "bank", "secure"]
+
+
+def _entropy(s: str) -> float:
+    """Shannon entropy of a string."""
+    if not s:
+        return 0.0
+    freq = Counter(s)
+    length = len(s)
+    return -sum((c / length) * math.log2(c / length) for c in freq.values())
+
+
+def extract_url_features(url: str) -> list:
+    """Extract 20 lexical features from a URL (must match training pipeline)."""
+    try:
+        url_lower = url.lower()
+        url_length = len(url)
+        hostname = url.split("//")[-1].split("/")[0].split(":")[0].split("@")[-1]
+        hostname_length = len(hostname)
+        path = "/" + "/".join(url.split("//")[-1].split("/")[1:]) if "/" in url.split("//")[-1] else "/"
+        path_length = len(path)
+        num_dots = url.count(".")
+        num_hyphens = url.count("-")
+        num_underscores = url.count("_")
+        num_slashes = url.count("/")
+        num_at = url.count("@")
+        num_digits = sum(c.isdigit() for c in url)
+        num_special = sum(not c.isalnum() and c not in "./-_:@" for c in url)
+        digit_ratio = num_digits / max(url_length, 1)
+        letter_ratio = sum(c.isalpha() for c in url) / max(url_length, 1)
+        has_https = 1 if url_lower.startswith("https") else 0
+        has_ip = 1 if re.search(r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}", hostname) else 0
+        has_port = 1 if re.search(r":\d{2,5}", url.split("//")[-1].split("/")[0]) else 0
+        parts = hostname.split(".")
+        num_subdomains = max(len(parts) - 2, 0)
+        tld = "." + parts[-1] if parts else ""
+        has_suspicious_tld = 1 if tld in SUSPICIOUS_TLDS else 0
+        has_brand = 0
+        for brand in BRAND_NAMES:
+            if brand in hostname and not hostname.endswith(f"{brand}.com") and not hostname.endswith(f"{brand}.org"):
+                has_brand = 1
+                break
+        url_entropy = _entropy(url)
+        longest_word = len(max(re.split(r"[^a-zA-Z]", url), key=len)) if url else 0
+        return [
+            url_length, hostname_length, path_length,
+            num_dots, num_hyphens, num_underscores, num_slashes,
+            num_at, num_digits, num_special,
+            digit_ratio, letter_ratio,
+            has_https, has_ip, has_port,
+            num_subdomains, has_suspicious_tld, has_brand,
+            url_entropy, longest_word,
+        ]
+    except Exception:
+        return [0] * 20
+
+
+def extract_domain_features(domain: str) -> list:
+    """Extract 14 structural features from a domain (must match training pipeline)."""
+    try:
+        domain = domain.lower().strip()
+        length = len(domain)
+        num_dots = domain.count(".")
+        num_hyphens = domain.count("-")
+        num_digits = sum(c.isdigit() for c in domain)
+        letters = [c for c in domain if c.isalpha()]
+        digit_ratio = num_digits / max(length, 1)
+        vowels = sum(1 for c in letters if c in "aeiou")
+        consonants = len(letters) - vowels
+        consonant_ratio = consonants / max(len(letters), 1)
+        vowel_ratio = vowels / max(len(letters), 1)
+        parts = domain.split(".")
+        tld = "." + parts[-1] if parts else ""
+        has_suspicious_tld = 1 if tld in SUSPICIOUS_TLDS else 0
+        has_brand = 0
+        for brand in BRAND_NAMES:
+            if brand in domain and domain != f"{brand}.com" and domain != f"www.{brand}.com":
+                has_brand = 1
+                break
+        subdomain_depth = max(len(parts) - 2, 0)
+        max_label_len = max(len(p) for p in parts) if parts else 0
+        avg_label_len = sum(len(p) for p in parts) / max(len(parts), 1)
+        dom_entropy = _entropy(domain)
+        num_unique = len(set(domain))
+        return [
+            length, num_dots, num_hyphens, num_digits,
+            digit_ratio, consonant_ratio, vowel_ratio,
+            has_suspicious_tld, has_brand,
+            subdomain_depth, max_label_len, avg_label_len,
+            dom_entropy, num_unique,
+        ]
+    except Exception:
+        return [0] * 14
+
+
+def extract_ip_api_features(vt_data: Dict, shodan_data: Dict, otx_data: Dict,
+                            abuseipdb_data: Dict) -> list:
+    """Extract 11 API features for IP classification (must match training pipeline)."""
+    vt_m, vt_s, vt_h, vt_u = 0, 0, 0, 0
+    if vt_data and 'error' not in vt_data:
+        stats = vt_data.get('last_analysis_stats', {}) or vt_data.get('data', {}).get('attributes', {}).get('last_analysis_stats', {})
+        if stats:
+            vt_m = stats.get('malicious', 0)
+            vt_s = stats.get('suspicious', 0)
+            vt_h = stats.get('harmless', 0)
+            vt_u = stats.get('undetected', 0)
+
+    ports, vulns = 0, 0
+    if shodan_data and 'error' not in shodan_data:
+        p = shodan_data.get('ports', [])
+        v = shodan_data.get('vulns', [])
+        ports = len(p) if isinstance(p, list) else 0
+        vulns = len(v) if isinstance(v, (list, dict)) else 0
+
+    otx_score, otx_pulses = 0, 0
+    if otx_data and 'error' not in otx_data:
+        otx_score = otx_data.get('threat_score', 0) or 0
+        otx_pulses = otx_data.get('source_count', 0) or 0
+
+    abuse_conf, abuse_reps = 0, 0
+    if abuseipdb_data and 'error' not in abuseipdb_data:
+        abuse_conf = abuseipdb_data.get('abuse_confidence_score', 0) or abuseipdb_data.get('threat_score', 0) or 0
+        abuse_reps = abuseipdb_data.get('total_reports', 0) or 0
+
+    is_private = 0
+    return [vt_m, vt_s, vt_h, vt_u, ports, vulns,
+            otx_score, otx_pulses, abuse_conf, abuse_reps, is_private]
+
+
+def extract_hash_api_features(vt_data: Dict, otx_data: Dict) -> list:
+    """Extract 9 API features for hash classification (must match training pipeline)."""
+    vt_m, vt_s, vt_h, vt_u = 0, 0, 0, 0
+    if vt_data and 'error' not in vt_data:
+        stats = vt_data.get('last_analysis_stats', {}) or vt_data.get('data', {}).get('attributes', {}).get('last_analysis_stats', {})
+        if stats:
+            vt_m = stats.get('malicious', 0)
+            vt_s = stats.get('suspicious', 0)
+            vt_h = stats.get('harmless', 0)
+            vt_u = stats.get('undetected', 0)
+
+    total = vt_m + vt_s + vt_h + vt_u
+    det_ratio = (vt_m + vt_s * 0.5) / max(total, 1)
+
+    otx_score, otx_pulses = 0, 0
+    if otx_data and 'error' not in otx_data:
+        otx_score = otx_data.get('threat_score', 0) or 0
+        otx_pulses = otx_data.get('source_count', 0) or 0
+
+    community = 0
+    if vt_data and 'error' not in vt_data:
+        community = vt_data.get('community_score', 0) or vt_data.get('data', {}).get('attributes', {}).get('reputation', 0) or 0
+
+    first_seen = 30  # default
+    return [vt_m, vt_s, vt_h, vt_u, det_ratio,
+            otx_score, otx_pulses, community, first_seen]
+
+
 # CONTEXT-AWARE TEXT CLASSIFICATION
-# ============================================
 
 # Educational/Preventive patterns that should NOT be marked as malicious
 BENIGN_CONTEXT_PATTERNS = [
@@ -99,9 +296,7 @@ def analyze_text_context(text: str) -> Dict[str, any]:
     }
 
 
-# ============================================
 # WEIGHTED API SCORING
-# ============================================
 
 def calculate_weighted_api_score(vt_data: Dict, shodan_data: Dict, otx_data: Dict,
                                  abuseipdb_data: Optional[Dict],
@@ -209,9 +404,7 @@ def calculate_weighted_api_score(vt_data: Dict, shodan_data: Dict, otx_data: Dic
     return scores
 
 
-# ============================================
 # MAIN CLASSIFICATION FUNCTION
-# ============================================
 
 def classify_threat_improved(vt_data=None, shodan_data=None, otx_data=None,
                             abuseipdb_data=None, ioc_type=None, user_input=None, google_data=None) -> Tuple[str, Dict]:
@@ -228,7 +421,7 @@ def classify_threat_improved(vt_data=None, shodan_data=None, otx_data=None,
     abuseipdb_data = abuseipdb_data or {}
     
     logger.info(f"\n{'='*80}")
-    logger.info(f"🔍 IMPROVED CLASSIFICATION for {ioc_type}: {user_input}")
+    logger.info(f" IMPROVED CLASSIFICATION for {ioc_type}: {user_input}")
     logger.info(f"{'='*80}")
     
     # Initialize result details
@@ -242,20 +435,18 @@ def classify_threat_improved(vt_data=None, shodan_data=None, otx_data=None,
     }
     
     try:
-        # ============================================
         # KEYWORD-SPECIFIC LOGIC WITH CONTEXT AWARENESS
-        # ============================================
         if ioc_type == "keyword":
-            logger.info(f"📝 Processing keyword with context awareness: {user_input}")
+            logger.info(f" Processing keyword with context awareness: {user_input}")
             
             # Analyze text context
             context = analyze_text_context(user_input)
             result_details['context_analysis'] = context
             
-            logger.info(f"🧠 Context Analysis:")
-            logger.info(f"   Benign patterns: {context['benign_score']}")
-            logger.info(f"   Malicious patterns: {context['malicious_score']}")
-            logger.info(f"   Context confidence: {context['confidence']:.2%}")
+            logger.info(f" Context Analysis:")
+            logger.info(f" Benign patterns: {context['benign_score']}")
+            logger.info(f" Malicious patterns: {context['malicious_score']}")
+            logger.info(f" Context confidence: {context['confidence']:.2%}")
             
             # If strong benign context detected, override
             if context['is_benign_context'] and context['confidence'] >= 0.7:
@@ -263,8 +454,8 @@ def classify_threat_improved(vt_data=None, shodan_data=None, otx_data=None,
                 result_details['reasoning'].append(f"Educational/preventive context detected (confidence: {context['confidence']:.2%})")
                 result_details['confidence_threshold_met'] = True
                 
-                logger.info(f"✅ BENIGN CONTEXT OVERRIDE: '{user_input}' is educational/preventive")
-                logger.info(f"📊 Result Details: {result_details}")
+                logger.info(f" BENIGN CONTEXT OVERRIDE: '{user_input}' is educational/preventive")
+                logger.info(f" Result Details: {result_details}")
                 logger.info(f"{'='*80}\n")
                 return 'Benign', result_details
             
@@ -273,8 +464,8 @@ def classify_threat_improved(vt_data=None, shodan_data=None, otx_data=None,
             result_details['api_scores'] = api_scores
             
             weighted_score = api_scores['weighted_total']
-            logger.info(f"📊 Weighted API Score: {weighted_score:.1f}/100")
-            logger.info(f"   VT: {api_scores['vt_score']:.1f}, OTX: {api_scores['otx_score']:.1f}, Shodan: {api_scores['shodan_score']:.1f}, AbuseIPDB: {api_scores['abuseipdb_score']:.1f}")
+            logger.info(f" Weighted API Score: {weighted_score:.1f}/100")
+            logger.info(f" VT: {api_scores['vt_score']:.1f}, OTX: {api_scores['otx_score']:.1f}, Shodan: {api_scores['shodan_score']:.1f}, AbuseIPDB: {api_scores['abuseipdb_score']:.1f}")
             
             # Use TF-IDF + ML model for keywords if available
             if model is not None and vectorizer is not None:
@@ -289,8 +480,8 @@ def classify_threat_improved(vt_data=None, shodan_data=None, otx_data=None,
                     
                     result_details['model_confidence'] = max(benign_conf, malicious_conf)
                     
-                    logger.info(f"🤖 ML Model Prediction:")
-                    logger.info(f"   Benign: {benign_conf:.2%}, Malicious: {malicious_conf:.2%}")
+                    logger.info(f" ML Model Prediction:")
+                    logger.info(f" Benign: {benign_conf:.2%}, Malicious: {malicious_conf:.2%}")
                     
                     # Combine ML confidence with API score
                     # If model is confident (>0.75) and agrees with API score, use it
@@ -322,7 +513,7 @@ def classify_threat_improved(vt_data=None, shodan_data=None, otx_data=None,
                     result_details['final_classification'] = classification
                     
                 except Exception as e:
-                    logger.error(f"❌ ML model error: {e}")
+                    logger.error(f" ML model error: {e}")
                     classification = classify_by_weighted_score(weighted_score, context['is_malicious_context'])
                     result_details['final_classification'] = classification
                     result_details['reasoning'].append(f"ML error, fallback to API score: {weighted_score:.1f}")
@@ -332,22 +523,22 @@ def classify_threat_improved(vt_data=None, shodan_data=None, otx_data=None,
                 result_details['final_classification'] = classification
                 result_details['reasoning'].append(f"No ML model, using weighted API score: {weighted_score:.1f}")
             
-            logger.info(f"✅ Final Classification: {classification}")
-            logger.info(f"📊 Result Details: {result_details}")
+            logger.info(f" Final Classification: {classification}")
+            logger.info(f" Result Details: {result_details}")
             logger.info(f"{'='*80}\n")
             return classification, result_details
         
-        # ============================================
-        # IP/DOMAIN/URL CLASSIFICATION
-        # ============================================
-        
-        # Calculate weighted API scores
+        # ══════════════════════════════════════════════════════════════════
+        # IP / URL / DOMAIN / HASH CLASSIFICATION — IOC-SPECIFIC MODELS
+        # ══════════════════════════════════════════════════════════════════
+
+        # Calculate weighted API scores (always computed as context)
         api_scores = calculate_weighted_api_score(vt_data, shodan_data, otx_data, abuseipdb_data, ioc_type)
         result_details['api_scores'] = api_scores
-        
+
         weighted_score = api_scores['weighted_total']
-        logger.info(f"📊 Weighted API Score: {weighted_score:.1f}/100")
-        logger.info(f"   VT: {api_scores['vt_score']:.1f}, OTX: {api_scores['otx_score']:.1f}, Shodan: {api_scores['shodan_score']:.1f}, AbuseIPDB: {api_scores['abuseipdb_score']:.1f}")
+        logger.info(f" Weighted API Score: {weighted_score:.1f}/100")
+        logger.info(f" VT: {api_scores['vt_score']:.1f}, OTX: {api_scores['otx_score']:.1f}, Shodan: {api_scores['shodan_score']:.1f}, AbuseIPDB: {api_scores['abuseipdb_score']:.1f}")
 
         abuse_confidence = abuseipdb_data.get('abuse_confidence_score', abuseipdb_data.get('threat_score', 0)) or 0
         abuse_reports = abuseipdb_data.get('total_reports', 0)
@@ -357,91 +548,111 @@ def classify_threat_improved(vt_data=None, shodan_data=None, otx_data=None,
             'reports': abuse_reports,
             'whitelisted': abuse_whitelisted
         }
-        
-        # Extract features for ML model
-        features = extract_numeric_features(vt_data, shodan_data, otx_data, ioc_type)
-        
-        # Use ML model if available
-        if model is not None:
+
+        # Select the correct IOC-specific model
+        ioc_model, ioc_scaler, features = None, None, None
+
+        if ioc_type == 'url' and url_model is not None:
+            ioc_model, ioc_scaler = url_model, url_scaler
+            features = extract_url_features(user_input)
+            logger.info(f" Using URL ML model (20 lexical features)")
+
+        elif ioc_type == 'ip' and ip_model is not None:
+            ioc_model, ioc_scaler = ip_model, ip_scaler
+            features = extract_ip_api_features(vt_data, shodan_data, otx_data, abuseipdb_data)
+            logger.info(f" Using IP ML model (11 API features)")
+
+        elif ioc_type == 'domain' and domain_model is not None:
+            ioc_model, ioc_scaler = domain_model, domain_scaler
+            features = extract_domain_features(user_input)
+            logger.info(f" Using Domain ML model (14 structural features)")
+
+        elif ioc_type == 'hash' and hash_model is not None:
+            ioc_model, ioc_scaler = hash_model, hash_scaler
+            features = extract_hash_api_features(vt_data, otx_data)
+            logger.info(f" Using Hash ML model (9 API features)")
+
+        # Run IOC-specific ML model if available
+        if ioc_model is not None and features is not None:
             try:
-                # Get prediction probabilities
-                proba = model.predict_proba([features])[0]
+                X = np.array([features], dtype=np.float32)
+                if ioc_scaler is not None:
+                    X = ioc_scaler.transform(X)
+
+                proba = ioc_model.predict_proba(X)[0]
                 benign_conf = proba[0]
                 malicious_conf = proba[1]
-                
+
                 result_details['model_confidence'] = max(benign_conf, malicious_conf)
-                
-                logger.info(f"🤖 ML Model Prediction:")
-                logger.info(f"   Benign: {benign_conf:.2%}, Malicious: {malicious_conf:.2%}")
-                logger.info(f"   Features: {features}")
-                
-                # Apply confidence threshold
+                result_details['model_type'] = f"{ioc_type}_xgboost"
+
+                logger.info(f" ML Model Prediction ({ioc_type}):")
+                logger.info(f" Benign: {benign_conf:.2%}, Malicious: {malicious_conf:.2%}")
+                logger.info(f" Features: {features}")
+
                 if result_details['model_confidence'] >= 0.75:
                     result_details['confidence_threshold_met'] = True
-                    
-                    # High confidence prediction
+
                     if malicious_conf > benign_conf:
-                        # Double-check with weighted score
                         if weighted_score >= 50 or abuse_confidence >= 75:
                             classification = 'Malicious'
-                            reason = f"High confidence malicious ({malicious_conf:.2%})"
+                            reason = f"{ioc_type.upper()} ML confident malicious ({malicious_conf:.2%})"
                             if abuse_confidence >= 75:
                                 reason += f" + AbuseIPDB {abuse_confidence:.0f}%"
                             reason += f" + API score {weighted_score:.1f}"
                             result_details['reasoning'].append(reason)
                         else:
                             classification = 'Suspicious'
-                            result_details['reasoning'].append(f"ML says malicious but moderate API score")
+                            result_details['reasoning'].append(f"{ioc_type.upper()} ML says malicious ({malicious_conf:.2%}) but moderate API score {weighted_score:.1f}")
                     else:
-                        # Benign prediction
                         if abuse_confidence >= 85 and not abuse_whitelisted:
                             classification = 'Malicious'
-                            result_details['reasoning'].append(f"AbuseIPDB confidence {abuse_confidence:.0f}% overrides benign prediction")
+                            result_details['reasoning'].append(f"AbuseIPDB {abuse_confidence:.0f}% overrides benign ML prediction")
                         elif abuse_confidence >= 55 and not abuse_whitelisted:
                             classification = 'Suspicious'
-                            result_details['reasoning'].append(f"AbuseIPDB shows elevated risk ({abuse_confidence:.0f}%), overriding benign prediction")
+                            result_details['reasoning'].append(f"AbuseIPDB elevated risk ({abuse_confidence:.0f}%) overrides benign ML")
                         elif weighted_score < 25:
                             classification = 'Benign'
-                            result_details['reasoning'].append(f"High confidence benign ({benign_conf:.2%}) + low API score")
+                            result_details['reasoning'].append(f"{ioc_type.upper()} ML confident benign ({benign_conf:.2%}) + low API score")
                         else:
                             classification = 'Informational'
-                            result_details['reasoning'].append(f"ML says benign but API shows some activity")
+                            result_details['reasoning'].append(f"{ioc_type.upper()} ML says benign but API shows some activity")
                 else:
-                    # Low confidence, rely on weighted score
                     result_details['confidence_threshold_met'] = False
                     classification = classify_by_weighted_score(weighted_score, False)
-                    result_details['reasoning'].append(f"ML confidence below 0.75, using API score: {weighted_score:.1f}")
-                
+                    result_details['reasoning'].append(f"{ioc_type.upper()} ML confidence below 0.75 ({result_details['model_confidence']:.2%}), fallback to API score {weighted_score:.1f}")
+
                 result_details['final_classification'] = classification
-                
+
             except Exception as e:
-                logger.error(f"❌ ML model error: {e}")
+                logger.error(f" {ioc_type} ML model error: {e}", exc_info=True)
                 classification = classify_by_weighted_score(weighted_score, False)
                 result_details['final_classification'] = classification
-                result_details['reasoning'].append(f"ML error, using API score: {weighted_score:.1f}")
+                result_details['reasoning'].append(f"{ioc_type.upper()} ML error ({e}), fallback to API score {weighted_score:.1f}")
         else:
-            # No model available
+            # No IOC-specific model available, use weighted scoring
             classification = classify_by_weighted_score(weighted_score, False)
             result_details['final_classification'] = classification
-            result_details['reasoning'].append(f"No ML model, using API score: {weighted_score:.1f}")
-        
+            result_details['reasoning'].append(f"No {ioc_type} ML model, using weighted API score: {weighted_score:.1f}")
+
+        # AbuseIPDB safety net for IPs
         if ioc_type == 'ip' and abuse_confidence and not abuse_whitelisted:
             if abuse_confidence >= 90 and classification != 'Malicious':
                 classification = 'Malicious'
                 result_details['final_classification'] = classification
-                result_details['reasoning'].append(f"Forced malicious due to AbuseIPDB confidence {abuse_confidence:.0f}% and {abuse_reports} reports")
+                result_details['reasoning'].append(f"Forced malicious: AbuseIPDB {abuse_confidence:.0f}% with {abuse_reports} reports")
             elif abuse_confidence >= 60 and classification in ['Benign', 'Informational']:
                 classification = 'Suspicious'
                 result_details['final_classification'] = classification
-                result_details['reasoning'].append(f"Escalated to Suspicious due to AbuseIPDB confidence {abuse_confidence:.0f}%")
+                result_details['reasoning'].append(f"Escalated to Suspicious: AbuseIPDB {abuse_confidence:.0f}%")
 
-        logger.info(f"✅ Final Classification: {classification}")
-        logger.info(f"📊 Result Details: {result_details}")
+        logger.info(f" Final Classification: {classification}")
+        logger.info(f" Result Details: {result_details}")
         logger.info(f"{'='*80}\n")
         return classification, result_details
     
     except Exception as e:
-        logger.error(f"❌ Classification error: {e}", exc_info=True)
+        logger.error(f" Classification error: {e}", exc_info=True)
         result_details['final_classification'] = 'Unknown'
         result_details['reasoning'].append(f"Error: {str(e)}")
         return 'Unknown', result_details
@@ -453,7 +664,7 @@ def classify_by_weighted_score(weighted_score: float, has_malicious_context: boo
     """
     # Adjust thresholds if malicious context detected
     if has_malicious_context:
-        weighted_score += 15  # Boost score if malicious patterns found
+        weighted_score += 15 # Boost score if malicious patterns found
     
     if weighted_score >= 70:
         return 'Malicious'
@@ -467,30 +678,24 @@ def classify_by_weighted_score(weighted_score: float, has_malicious_context: boo
 
 def extract_numeric_features(vt_data: Dict, shodan_data: Dict, otx_data: Dict, ioc_type: str) -> list:
     """
-    Extract numeric features for ML model (same as before for compatibility)
+    Legacy feature extraction (kept for backward compatibility).
+    New code uses IOC-specific extractors above.
     """
     features = [0, 0, 0, 0, 0, 0]
-    
-    # VirusTotal features
     if vt_data and 'error' not in vt_data:
         stats = vt_data.get('last_analysis_stats', {}) or vt_data.get('data', {}).get('attributes', {}).get('last_analysis_stats', {})
         if stats:
             features[0] = stats.get('malicious', 0)
             features[1] = stats.get('suspicious', 0)
-    
-    # Shodan features (IPs only)
     if ioc_type == 'ip' and shodan_data and 'error' not in shodan_data:
         ports = shodan_data.get('ports', [])
         vulns = shodan_data.get('vulns', [])
         features[2] = len(ports) if isinstance(ports, list) else 0
         features[3] = len(vulns) if isinstance(vulns, (list, dict)) else 0
-    
-    # OTX features
     if otx_data and 'error' not in otx_data:
         features[4] = otx_data.get('threat_score', 0)
         otx_class = otx_data.get('classification', '').lower()
         features[5] = 1 if otx_class in ['malicious', 'suspicious'] else 0
-    
     return features
 
 
@@ -506,11 +711,11 @@ def classify_threat(vt_data=None, shodan_data=None, otx_data=None,
     )
     
     # Log details for transparency
-    logger.info(f"📋 Classification Summary:")
-    logger.info(f"   Final Label: {classification}")
-    logger.info(f"   Model Confidence: {details.get('model_confidence', 0):.2%}")
-    logger.info(f"   Confidence Threshold Met: {details.get('confidence_threshold_met', False)}")
-    logger.info(f"   Reasoning: {'; '.join(details.get('reasoning', []))}")
+    logger.info(f" Classification Summary:")
+    logger.info(f" Final Label: {classification}")
+    logger.info(f" Model Confidence: {details.get('model_confidence', 0):.2%}")
+    logger.info(f" Confidence Threshold Met: {details.get('confidence_threshold_met', False)}")
+    logger.info(f" Reasoning: {'; '.join(details.get('reasoning', []))}")
     
     return classification
 

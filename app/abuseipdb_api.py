@@ -11,7 +11,7 @@ from typing import Dict, Optional
 logger = logging.getLogger(__name__)
 
 ABUSEIPDB_API_KEY = os.getenv("ABUSEIPDB_API_KEY")
-ABUSEIPDB_BASE_URL = "https://api.abuseipdb.com/api/v2"  # ✅ Fixed: .com not .io
+ABUSEIPDB_BASE_URL = "https://api.abuseipdb.com/api/v2" # Fixed: .com not .io
 
 
 def abuseipdb_lookup(ip: str) -> Dict:
@@ -27,7 +27,7 @@ def abuseipdb_lookup(ip: str) -> Dict:
     Free tier limits: 1,000 checks/day
     """
     if not ABUSEIPDB_API_KEY:
-        logger.warning("⚠️ AbuseIPDB API key not configured")
+        logger.warning(" AbuseIPDB API key not configured")
         return {
             "error": "AbuseIPDB API key not configured",
             "threat_score": 0,
@@ -43,11 +43,11 @@ def abuseipdb_lookup(ip: str) -> Dict:
         
         params = {
             "ipAddress": ip,
-            "maxAgeInDays": 90,  # Check reports from last 90 days
-            "verbose": ""  # Get detailed report info
+            "maxAgeInDays": 90, # Check reports from last 90 days
+            "verbose": "" # Get detailed report info
         }
         
-        logger.info(f"🔍 Checking AbuseIPDB for IP: {ip}")
+        logger.info(f" Checking AbuseIPDB for IP: {ip}")
         response = requests.get(
             f"{ABUSEIPDB_BASE_URL}/check",
             headers=headers,
@@ -95,7 +95,7 @@ def abuseipdb_lookup(ip: str) -> Dict:
                     category_name = get_category_name(category)
                     categories[category_name] = categories.get(category_name, 0) + 1
             
-            logger.info(f"✅ AbuseIPDB: Confidence {abuse_confidence_score}%, {total_reports} reports")
+            logger.info(f" AbuseIPDB: Confidence {abuse_confidence_score}%, {total_reports} reports")
             
             return {
                 "threat_score": threat_score,
@@ -130,7 +130,7 @@ def abuseipdb_lookup(ip: str) -> Dict:
             }
             
         elif response.status_code == 401:
-            logger.error("❌ AbuseIPDB: Invalid API key")
+            logger.error(" AbuseIPDB: Invalid API key")
             return {
                 "error": "Invalid AbuseIPDB API key",
                 "threat_score": 0,
@@ -139,7 +139,7 @@ def abuseipdb_lookup(ip: str) -> Dict:
             }
             
         elif response.status_code == 429:
-            logger.error("❌ AbuseIPDB: Rate limit exceeded")
+            logger.error(" AbuseIPDB: Rate limit exceeded")
             return {
                 "error": "AbuseIPDB rate limit exceeded (1000/day)",
                 "threat_score": 0,
@@ -148,7 +148,7 @@ def abuseipdb_lookup(ip: str) -> Dict:
             }
             
         elif response.status_code == 422:
-            logger.error(f"❌ AbuseIPDB: Invalid IP address: {ip}")
+            logger.error(f" AbuseIPDB: Invalid IP address: {ip}")
             return {
                 "error": f"Invalid IP address: {ip}",
                 "threat_score": 0,
@@ -157,7 +157,7 @@ def abuseipdb_lookup(ip: str) -> Dict:
             }
             
         else:
-            logger.error(f"❌ AbuseIPDB API error: {response.status_code}")
+            logger.error(f" AbuseIPDB API error: {response.status_code}")
             return {
                 "error": f"AbuseIPDB API error: {response.status_code}",
                 "threat_score": 0,
@@ -166,7 +166,7 @@ def abuseipdb_lookup(ip: str) -> Dict:
             }
     
     except requests.exceptions.Timeout:
-        logger.error("❌ AbuseIPDB: Request timeout")
+        logger.error(" AbuseIPDB: Request timeout")
         return {
             "error": "AbuseIPDB request timeout",
             "threat_score": 0,
@@ -175,7 +175,7 @@ def abuseipdb_lookup(ip: str) -> Dict:
         }
     
     except requests.exceptions.ConnectionError as e:
-        logger.warning(f"⚠️ AbuseIPDB: Connection error (DNS/Network issue) - {e}")
+        logger.warning(f" AbuseIPDB: Connection error (DNS/Network issue) - {e}")
         return {
             "error": "AbuseIPDB connection failed (check DNS/network)",
             "threat_score": 0,
@@ -185,7 +185,7 @@ def abuseipdb_lookup(ip: str) -> Dict:
         }
     
     except Exception as e:
-        logger.error(f"❌ AbuseIPDB lookup error: {e}", exc_info=True)
+        logger.error(f" AbuseIPDB lookup error: {e}", exc_info=True)
         return {
             "error": str(e),
             "threat_score": 0,
@@ -267,12 +267,12 @@ def abuseipdb_report_ip(ip: str, categories: list, comment: str) -> Dict:
         )
         
         if response.status_code == 200:
-            logger.info(f"✅ Reported IP {ip} to AbuseIPDB")
+            logger.info(f" Reported IP {ip} to AbuseIPDB")
             return {"success": True, "data": response.json()}
         else:
-            logger.error(f"❌ AbuseIPDB report failed: {response.status_code}")
+            logger.error(f" AbuseIPDB report failed: {response.status_code}")
             return {"error": f"Report failed: {response.status_code}"}
     
     except Exception as e:
-        logger.error(f"❌ AbuseIPDB report error: {e}")
+        logger.error(f" AbuseIPDB report error: {e}")
         return {"error": str(e)}

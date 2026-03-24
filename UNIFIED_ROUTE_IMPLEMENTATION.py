@@ -17,7 +17,7 @@ from app.orchestrator import (
 @login_required
 def index_unified():
     """
-    🚀 UNIFIED THREAT INTELLIGENCE ENDPOINT
+     UNIFIED THREAT INTELLIGENCE ENDPOINT
     
     This endpoint orchestrates ALL threat intelligence modules:
     - Automatic input detection (IP, URL, domain, hash, keyword)
@@ -36,9 +36,9 @@ def index_unified():
             return redirect(url_for("main.index_unified"))
         
         logger.info(f"\n{'='*80}")
-        logger.info(f"🎯 NEW UNIFIED SEARCH REQUEST")
-        logger.info(f"   User: {session.get('username', 'Anonymous')}")
-        logger.info(f"   Input: {user_input}")
+        logger.info(f" NEW UNIFIED SEARCH REQUEST")
+        logger.info(f" User: {session.get('username', 'Anonymous')}")
+        logger.info(f" Input: {user_input}")
         logger.info(f"{'='*80}\n")
         
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -46,7 +46,7 @@ def index_unified():
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         cached = get_cached_result(user_input)
         if cached:
-            logger.info("💾 Returning cached results")
+            logger.info(" Returning cached results")
             flash("Results loaded from cache (scanned recently)", "info")
             return render_template(
                 "results.html",
@@ -60,7 +60,7 @@ def index_unified():
         try:
             orchestrated_data = orchestrate_threat_intelligence(user_input)
         except Exception as e:
-            logger.error(f"❌ Orchestration failed: {e}", exc_info=True)
+            logger.error(f" Orchestration failed: {e}", exc_info=True)
             flash(f"Error analyzing threat: {str(e)}", "danger")
             return redirect(url_for("main.index_unified"))
         
@@ -87,7 +87,7 @@ def index_unified():
             timestamp=datetime.utcnow()
         )
         ioc_result.save()
-        logger.info(f"💾 Saved to MongoDB with ID: {ioc_result.id}")
+        logger.info(f" Saved to MongoDB with ID: {ioc_result.id}")
         
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         # STEP 4: Format Results for Template
@@ -131,10 +131,10 @@ def index_unified():
         # STEP 6: Render Results
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         logger.info(f"\n{'='*80}")
-        logger.info(f"✅ UNIFIED ANALYSIS COMPLETE")
-        logger.info(f"   Classification: {template_data.get('classification')}")
-        logger.info(f"   Total Time: {orchestrated_data.get('timing', {}).get('pipeline_total', 'N/A')}")
-        logger.info(f"   Errors: {len(orchestrated_data.get('errors', []))}")
+        logger.info(f" UNIFIED ANALYSIS COMPLETE")
+        logger.info(f" Classification: {template_data.get('classification')}")
+        logger.info(f" Total Time: {orchestrated_data.get('timing', {}).get('pipeline_total', 'N/A')}")
+        logger.info(f" Errors: {len(orchestrated_data.get('errors', []))}")
         logger.info(f"{'='*80}\n")
         
         if orchestrated_data.get('errors'):

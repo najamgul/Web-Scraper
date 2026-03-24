@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 
 # Configuration
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
-LLM_PROVIDER = os.getenv('LLM_PROVIDER', 'gemini')  # 'gemini' or 'ollama'
-LLM_MODEL = os.getenv('LLM_MODEL', 'gemini-pro')  # or 'gemini-1.5-pro'
+LLM_PROVIDER = os.getenv('LLM_PROVIDER', 'gemini') # 'gemini' or 'ollama'
+LLM_MODEL = os.getenv('LLM_MODEL', 'gemini-pro') # or 'gemini-1.5-pro'
 ENABLE_ENRICHMENT = os.getenv('ENABLE_ENRICHMENT', 'true').lower() == 'true'
 
 
@@ -113,7 +113,7 @@ def validate_response_structure(parsed):
 
 def generate_with_gemini(context):
     """
-    ✅ OPTIMIZED: Reduced max_tokens and faster config
+     OPTIMIZED: Reduced max_tokens and faster config
     """
     try:
         import google.generativeai as genai
@@ -124,12 +124,12 @@ def generate_with_gemini(context):
         
         logger.info(f"Calling Gemini API with model: {LLM_MODEL}")
         
-        # ✅ FASTER configuration
+        # FASTER configuration
         generation_config = {
-            'temperature': 0.2,  # ← Lower for faster, more focused responses
-            'top_p': 0.7,        # ← Reduced
-            'top_k': 30,         # ← Reduced
-            'max_output_tokens': 1024,  # ← Reduced from 2048
+            'temperature': 0.2, # ← Lower for faster, more focused responses
+            'top_p': 0.7, # ← Reduced
+            'top_k': 30, # ← Reduced
+            'max_output_tokens': 1024, # ← Reduced from 2048
         }
         
         safety_settings = [
@@ -139,7 +139,7 @@ def generate_with_gemini(context):
             {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
         ]
         
-        # ✅ Add timeout wrapper
+        # Add timeout wrapper
         import concurrent.futures
         
         def call_gemini():
@@ -149,16 +149,16 @@ def generate_with_gemini(context):
                 safety_settings=safety_settings
             )
         
-        # ✅ 8-second timeout for Gemini
+        # 8-second timeout for Gemini
         with concurrent.futures.ThreadPoolExecutor() as executor:
             future = executor.submit(call_gemini)
             try:
-                response = future.result(timeout=25)  # ← 20 second max
+                response = future.result(timeout=25) # ← 20 second max
             except concurrent.futures.TimeoutError:
                 logger.warning("Gemini API timeout - using fallback")
                 return get_fallback_explanation(context)
         
-        # ✅ Better Gemini response handling
+        # Better Gemini response handling
         try:
             if not response:
                 logger.warning("Gemini returned no response object")
@@ -308,7 +308,7 @@ def parse_text_response(text, context):
             elif current_section == 'indicators':
                 # Clean up list markers
                 cleaned = line.lstrip('-•*123456789.').strip()
-                if cleaned and len(cleaned) > 5:  # Avoid adding section headers
+                if cleaned and len(cleaned) > 5: # Avoid adding section headers
                     indicators.append(cleaned)
             elif current_section == 'recommendation':
                 recommendation += line + ' '
@@ -329,7 +329,7 @@ def parse_text_response(text, context):
         return {
             'summary': summary.strip(),
             'explanation': explanation.strip(),
-            'indicators': indicators[:5],  # Limit to 5 indicators
+            'indicators': indicators[:5], # Limit to 5 indicators
             'recommendation': recommendation.strip(),
             'confidence': confidence
         }
@@ -347,14 +347,14 @@ def get_fallback_explanation(context):
     ioc_value = context.get('ioc_value', '')
     ioc_type = context.get('ioc_type', '')
     
-    # ✅ Log why we're using fallback
+    # Log why we're using fallback
     
     
     vt_summary = context.get('vt_summary', '')
     shodan_summary = context.get('shodan_summary', '')
     otx_summary = context.get('otx_summary', '')
     
-    logger.info(f"📋 Using fallback explanation for {ioc_type}: {ioc_value} (Classification: {classification})")
+    logger.info(f" Using fallback explanation for {ioc_type}: {ioc_value} (Classification: {classification})")
     
     # Build summary
     summary = f"This {ioc_type} ({ioc_value}) has been classified as {classification} based on multi-source threat intelligence analysis."

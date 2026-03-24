@@ -14,7 +14,7 @@ app = Flask(__name__)
 load_dotenv()
 
 csrf = CSRFProtect()
-db = None  # Kept for compatibility
+db = None # Kept for compatibility
 
 
 
@@ -41,9 +41,9 @@ def create_app():
     # Connect to MongoDB Atlas
     try:
         connect(host=app.config["MONGODB_URI"])
-        print("✅ Connected to MongoDB Atlas")
+        print(" Connected to MongoDB Atlas")
     except Exception as e:
-        print(f"❌ MongoDB connection failed: {e}")
+        print(f" MongoDB connection failed: {e}")
         raise
     
     csrf.init_app(app)

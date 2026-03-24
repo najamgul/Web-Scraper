@@ -1,0 +1,52 @@
+{
+  "keyword": {
+    "train_acc": 0.967337,
+    "test_acc": 0.915789,
+    "cv_mean": 0.861867,
+    "cv_std": 0.018968,
+    "precision": 0.916345,
+    "recall": 0.915789,
+    "f1": 0.915658,
+    "gap": 0.051547
+  },
+  "url": {
+    "train_acc": 0.999886,
+    "test_acc": 1.0,
+    "cv_mean": 0.999886,
+    "cv_std": 0.000227,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "gap": -0.000114
+  },
+  "ip": {
+    "train_acc": 0.999687,
+    "test_acc": 0.994375,
+    "cv_mean": 0.997812,
+    "cv_std": 0.000765,
+    "precision": 0.994382,
+    "recall": 0.994375,
+    "f1": 0.994375,
+    "gap": 0.005312
+  },
+  "domain": {
+    "train_acc": 1.0,
+    "test_acc": 1.0,
+    "cv_mean": 1.0,
+    "cv_std": 0.0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "gap": 0.0
+  },
+  "hash": {
+    "train_acc": 1.0,
+    "test_acc": 1.0,
+    "cv_mean": 1.0,
+    "cv_std": 0.0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "gap": 0.0
+  }
+}

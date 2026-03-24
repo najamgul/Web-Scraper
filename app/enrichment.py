@@ -13,12 +13,12 @@ logger = logging.getLogger(__name__)
 
 def enrich_threat_intelligence(ioc_value, ioc_type, vt_data, shodan_data, otx_data, classification):
     """
-    ✅ OPTIMIZED: Skip WHOIS lookup to save 5-10 seconds
+     OPTIMIZED: Skip WHOIS lookup to save 5-10 seconds
     """
     try:
-        logger.info(f"🧠 Starting enrichment for {ioc_type}: {ioc_value}")
+        logger.info(f" Starting enrichment for {ioc_type}: {ioc_value}")
         
-        # ✅ SKIP WHOIS - too slow
+        # SKIP WHOIS - too slow
         whois_data = None
         
         # Extract summaries
@@ -40,11 +40,11 @@ def enrich_threat_intelligence(ioc_value, ioc_type, vt_data, shodan_data, otx_da
                 'vt': vt_data,
                 'shodan': shodan_data,
                 'otx': otx_data,
-                'whois': None  # ✅ Skip WHOIS
+                'whois': None # Skip WHOIS
             }
         }
         
-        # ✅ AI explanation with shorter timeout
+        # AI explanation with shorter timeout
         ai_explanation = generate_threat_explanation(context)
         
         enrichment = {
@@ -54,7 +54,7 @@ def enrich_threat_intelligence(ioc_value, ioc_type, vt_data, shodan_data, otx_da
             'recommendation': ai_explanation.get('recommendation', ''),
             'confidence': ai_explanation.get('confidence', 'Medium'),
             'risk_score': calculate_risk_score(vt_data, shodan_data, otx_data),
-            'sources_analyzed': get_sources_used(vt_data, shodan_data, otx_data, None),  # ✅ No WHOIS
+            'sources_analyzed': get_sources_used(vt_data, shodan_data, otx_data, None), # No WHOIS
             'technical_details': {
                 'vt_detections': vt_summary,
                 'network_exposure': shodan_summary,
@@ -64,11 +64,11 @@ def enrich_threat_intelligence(ioc_value, ioc_type, vt_data, shodan_data, otx_da
             'timestamp': datetime.utcnow().isoformat()
         }
         
-        logger.info(f"✅ Enrichment completed for {ioc_value}")
+        logger.info(f" Enrichment completed for {ioc_value}")
         return enrichment
     
     except Exception as e:
-        logger.error(f"❌ Enrichment error for {ioc_value}: {e}", exc_info=True)
+        logger.error(f" Enrichment error for {ioc_value}: {e}", exc_info=True)
         return {
             'summary': 'Enrichment unavailable',
             'error': str(e),
@@ -174,7 +174,7 @@ def extract_whois_summary(whois_data):
             
             # Check if newly registered (suspicious)
             if whois_data.get('days_old', 999) < 30:
-                summary_parts.append("⚠️ Newly registered domain (< 30 days)")
+                summary_parts.append(" Newly registered domain (< 30 days)")
         
         # Registrar
         if 'registrar' in whois_data:
@@ -182,7 +182,7 @@ def extract_whois_summary(whois_data):
         
         # Privacy protection
         if whois_data.get('privacy_protected', False):
-            summary_parts.append("⚠️ WHOIS privacy protection enabled")
+            summary_parts.append(" WHOIS privacy protection enabled")
         
         return '. '.join(summary_parts) if summary_parts else "Registration data available"
     
