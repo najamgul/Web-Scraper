@@ -68,6 +68,9 @@ def vt_lookup_ip(ip):
                 },
                 "raw": data
             }
+        elif response.status_code == 429:
+            logger.warning("VirusTotal rate limit hit (429) on IP lookup")
+            return {"error": "VT rate limit exceeded", "rate_limited": True, "threat_score": 0, "classification": "Unknown", "details": {}}
         else:
             return {"error": f"VT API error: {response.status_code}", "threat_score": 0, "classification": "Unknown", "details": {}}
     
@@ -129,6 +132,9 @@ def vt_lookup_domain(domain):
                 },
                 "raw": data
             }
+        elif response.status_code == 429:
+            logger.warning("VirusTotal rate limit hit (429) on domain lookup")
+            return {"error": "VT rate limit exceeded", "rate_limited": True, "threat_score": 0, "classification": "Unknown", "details": {}}
         else:
             return {"error": f"VT API error: {response.status_code}", "threat_score": 0, "classification": "Unknown", "details": {}}
     
@@ -191,6 +197,9 @@ def vt_lookup_url(url):
                 },
                 "raw": data
             }
+        elif response.status_code == 429:
+            logger.warning("VirusTotal rate limit hit (429) on URL lookup")
+            return {"error": "VT rate limit exceeded", "rate_limited": True, "threat_score": 0, "classification": "Unknown", "details": {}}
         else:
             return {"error": f"VT API error: {response.status_code}", "threat_score": 0, "classification": "Unknown", "details": {}}
     

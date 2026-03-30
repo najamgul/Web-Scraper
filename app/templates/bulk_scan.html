@@ -80,6 +80,11 @@
         
         .file-input { display: none; }
         
+        .eta-banner { display:none; background: rgba(67,97,238,0.12); border: 1px solid rgba(67,97,238,0.3); border-radius: 12px; padding: 0.9rem 1.4rem; margin-bottom: 1.5rem; color: #a5b4fc; font-size: 0.9rem; display: flex; align-items: center; gap: 0.7rem; }
+        .eta-banner i { color: #4361ee; flex-shrink: 0; }
+        .eta-banner strong { color: #e2e8f0; }
+        .rate-info { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.25); border-radius: 10px; padding: 0.7rem 1.2rem; color: #fbbf24; font-size: 0.82rem; display: flex; align-items: center; gap: 0.6rem; margin-top: 1rem; }
+
         @media (max-width: 768px) {
             .scan-card { grid-template-columns: 1fr; }
             .form-actions { flex-direction: column; }
@@ -119,8 +124,12 @@ suspicious keyword
 ...
 
 Supports: IPs, Domains, URLs, Hashes, Keywords
-Maximum: 500 IOCs per batch"></textarea>
-                <div class="ioc-counter">IOCs detected: <span id="iocCount">0</span> / 500</div>
+Maximum: 100 IOCs per batch (API rate-limit safe)"></textarea>
+                <div class="ioc-counter">IOCs detected: <span id="iocCount">0</span> / 100</div>
+                <div class="rate-info">
+                    <i class="fas fa-gauge-high"></i>
+                    <span>Scans are rate-limited to <strong>4 req/min (VirusTotal free tier)</strong>. Batches &gt; 50 IOCs skip OTX to reduce API calls. Previously scanned IOCs are served from a <strong>24-hour cache</strong> at no API cost.</span>
+                </div>
             </div>
             
             <div class="form-actions">
@@ -140,7 +149,13 @@ Maximum: 500 IOCs per batch"></textarea>
                 <i class="fas fa-spinner fa-spin" style="color: #4361ee;" id="progressSpinner"></i>
                 <span id="progressTitle">Scanning IOCs...</span>
             </h2>
-            <p style="color: #94a3b8; margin-bottom: 1rem;" id="progressSubtitle">Processing your indicators...</p>
+            <p style="color: #94a3b8; margin-bottom: 0.5rem;" id="progressSubtitle">Processing your indicators...</p>
+
+            <!-- ETA banner -->
+            <div class="eta-banner" id="etaBanner">
+                <i class="fas fa-clock"></i>
+                <span id="etaText">Calculating estimated time...</span>
+            </div>
             
             <div class="progress-bar-container">
                 <div class="progress-bar" id="progressBar" style="width: 0%;">0%</div>
@@ -188,11 +203,24 @@ Maximum: 500 IOCs per batch"></textarea>
     const iocInput = document.getElementById('iocInput');
     const iocCount = document.getElementById('iocCount');
     const csrfToken = '{{ csrf_token() }}';
+    const MAX_IOCS = 100;
+    const VT_DELAY_SECS = 15; // must match ITER_SLEEP in bulk_investigation_routes.py
     
     iocInput.addEventListener('input', () => {
         const lines = iocInput.value.split('\n').filter(l => l.trim().length > 2);
         iocCount.textContent = lines.length;
-        iocCount.style.color = lines.length > 500 ? '#e74c3c' : '#4cc9f0';
+        iocCount.style.color = lines.length > MAX_IOCS ? '#e74c3c' : '#4cc9f0';
+
+        // Live ETA preview in the form
+        const est = lines.length * VT_DELAY_SECS;
+        const min = Math.floor(est / 60), sec = est % 60;
+        const etaEl = document.getElementById('etaFormHint');
+        if (etaEl && lines.length > 0) {
+            etaEl.textContent = `⏱ Estimated scan time: ~${min}m ${sec}s (rate-limited @ 4 req/min)`;
+            etaEl.style.display = 'block';
+        } else if (etaEl) {
+            etaEl.style.display = 'none';
+        }
     });
     
     function handleFileUpload(e) {
@@ -205,6 +233,8 @@ Maximum: 500 IOCs per batch"></textarea>
         };
         reader.readAsText(file);
     }
+
+    let _estimatedSecs = 0;
     
     function startBulkScan() {
         const iocs = iocInput.value.trim();
@@ -223,10 +253,24 @@ Maximum: 500 IOCs per batch"></textarea>
         .then(r => r.json())
         .then(data => {
             if (data.error) { alert(data.error); btn.disabled = false; btn.innerHTML = '<i class="fas fa-rocket"></i> Start Bulk Scan'; return; }
+
+            // Store ETA from server
+            _estimatedSecs = data.estimated_seconds || 0;
             
             // Show progress
             document.getElementById('scanForm').style.display = 'none';
-            document.getElementById('progressSection').style.display = 'block';
+            const progressSection = document.getElementById('progressSection');
+            progressSection.style.display = 'block';
+
+            // Show ETA banner
+            const etaBanner = document.getElementById('etaBanner');
+            const etaText = document.getElementById('etaText');
+            if (_estimatedSecs > 0) {
+                const min = Math.floor(_estimatedSecs / 60), sec = _estimatedSecs % 60;
+                const otxNote = data.use_otx ? '' : ' OTX lookups skipped (large batch — VT only).';
+                etaText.innerHTML = `<strong>Estimated completion: ~${min}m ${sec}s</strong> — rate-limited to 4 req/min (VirusTotal free tier). Previously-cached results skip the API entirely.${otxNote}`;
+                etaBanner.style.display = 'flex';
+            }
             
             // Poll progress
             pollProgress(data.bulk_id);
@@ -246,7 +290,15 @@ Maximum: 500 IOCs per batch"></textarea>
                 const pct = data.progress || 0;
                 document.getElementById('progressBar').style.width = pct + '%';
                 document.getElementById('progressBar').textContent = Math.round(pct) + '%';
-                document.getElementById('progressSubtitle').textContent = `${data.completed_iocs} / ${data.total_iocs} IOCs processed`;
+
+                const done = data.completed_iocs || 0;
+                const total = data.total_iocs || 0;
+                const remaining = total - done;
+                const remSecs = remaining * VT_DELAY_SECS;
+                const remMin = Math.floor(remSecs / 60), remSec = remSecs % 60;
+                document.getElementById('progressSubtitle').textContent =
+                    `${done} / ${total} IOCs processed` +
+                    (remaining > 0 ? ` — ~${remMin}m ${remSec}s remaining` : '');
                 
                 document.getElementById('pMalicious').textContent = data.malicious_count;
                 document.getElementById('pBenign').textContent = data.benign_count;
@@ -257,17 +309,23 @@ Maximum: 500 IOCs per batch"></textarea>
                 
                 if (data.status === 'completed' || data.status === 'failed') {
                     clearInterval(interval);
-                    document.getElementById('progressSpinner').className = 'fas fa-check-circle';
-                    document.getElementById('progressSpinner').style.color = '#2ecc71';
+                    document.getElementById('progressSpinner').className = data.status === 'completed' ? 'fas fa-check-circle' : 'fas fa-times-circle';
+                    document.getElementById('progressSpinner').style.color = data.status === 'completed' ? '#2ecc71' : '#ef4444';
                     document.getElementById('progressTitle').textContent = data.status === 'completed' ? 'Scan Complete!' : 'Scan Failed';
                     document.getElementById('progressBar').style.width = '100%';
                     document.getElementById('progressBar').textContent = '100%';
+
+                    // Update ETA banner to show completion
+                    const etaText = document.getElementById('etaText');
+                    if (etaText) etaText.innerHTML = data.status === 'completed'
+                        ? '<strong>✓ Scan finished successfully.</strong> All results have been saved.'
+                        : '<strong>⚠ Scan encountered errors.</strong> Check individual results below.';
                     
                     document.getElementById('viewResultsBtn').style.display = 'block';
                     document.getElementById('viewResultsLink').href = `/bulk-results/${bulkId}`;
                 }
             });
-        }, 2000);
+        }, 3000);
     }
     </script>
 </body>

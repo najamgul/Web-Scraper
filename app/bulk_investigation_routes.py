@@ -2,7 +2,8 @@
 # Routes for Bulk IOC Scanning and Investigation Notebook
 import logging
 import threading
-from datetime import datetime
+import time
+from datetime import datetime, timedelta
 from flask import Blueprint, render_template, request, jsonify, session, redirect, url_for, flash
 from app.models import User, IOCResult, BulkScan, Investigation, InvestigationNote
 from app.decorators import login_required
@@ -11,10 +12,24 @@ logger = logging.getLogger(__name__)
 
 bulk_bp = Blueprint('bulk', __name__)
 
+# ─── Rate-limit configuration ────────────────────────────────────────────────
+# VirusTotal free tier: 4 req/min  →  1 request every 15 s
+# OTX free tier      : ~10 req/min →  1 request every 6 s
+# We use the larger of the two as the inter-iteration sleep.
+VT_RATE_DELAY      = 15          # seconds between VT calls
+OTX_RATE_DELAY     = 6           # seconds between OTX calls
+ITER_SLEEP         = VT_RATE_DELAY  # dominant delay per IOC
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# BULK IOC SCANNER
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Fix 3 – skip OTX entirely for large batches to halve outbound requests
+OTX_BATCH_THRESHOLD = 50         # if batch > this, OTX is skipped
+
+# Fix 5 – safe batch cap that avoids instant rate-limit exhaustion
+MAX_IOCS_PER_BATCH = 100
+
+# Fix 2 – how long a cached result is considered fresh
+CACHE_TTL_HOURS = 24
+# ─────────────────────────────────────────────────────────────────────────────
+
 
 @bulk_bp.route("/bulk-scan", methods=["GET"])
 @login_required
@@ -43,8 +58,14 @@ def start_bulk_scan():
         if not iocs:
             return jsonify({'error': 'No valid IOCs provided'}), 400
         
-        if len(iocs) > 500:
-            return jsonify({'error': 'Maximum 500 IOCs per batch'}), 400
+        if len(iocs) > MAX_IOCS_PER_BATCH:
+            return jsonify({
+                'error': (
+                    f'Maximum {MAX_IOCS_PER_BATCH} IOCs per batch. '
+                    'This limit protects against VirusTotal / OTX free-tier rate limits '
+                    '(4 req/min). Split your list into smaller batches or upgrade your API keys.'
+                )
+            }), 400
         
         user = User.objects.get(id=session['user_id'])
         
@@ -58,17 +79,27 @@ def start_bulk_scan():
         bulk.save()
         
         # Run scan in background thread
+        use_otx = len(iocs) <= OTX_BATCH_THRESHOLD
+        estimated_secs = len(iocs) * ITER_SLEEP
+
         thread = threading.Thread(
             target=_run_bulk_scan,
-            args=(str(bulk.id), iocs, str(user.id)),
+            args=(str(bulk.id), iocs, str(user.id), use_otx),
             daemon=True
         )
         thread.start()
-        
+
         return jsonify({
             'status': 'started',
             'bulk_id': str(bulk.id),
-            'total': len(iocs)
+            'total': len(iocs),
+            'use_otx': use_otx,
+            'estimated_seconds': estimated_secs,
+            'message': (
+                f'Scan started. Estimated completion: ~{estimated_secs // 60} min '
+                f'{estimated_secs % 60} sec (rate-limited to protect API quota).'
+                + ('' if use_otx else ' OTX skipped for large batch.')
+            )
         })
         
     except Exception as e:
@@ -76,70 +107,86 @@ def start_bulk_scan():
         return jsonify({'error': str(e)}), 500
 
 
-def _run_bulk_scan(bulk_id, iocs, user_id):
-    """Background worker for bulk IOC scanning"""
-    from flask import current_app
-    from app import create_app
-    
-    # We need app context for DB access in background thread
+def _run_bulk_scan(bulk_id, iocs, user_id, use_otx=True):
+    """
+    Background worker for bulk IOC scanning.
+
+    Rate-limit mitigations applied:
+      1. time.sleep(ITER_SLEEP) between every IOC (Fix 1)
+      2. Global 24-hour DB cache checked before any API call (Fix 2)
+      3. OTX skipped when batch > OTX_BATCH_THRESHOLD (Fix 3)
+      4. Exponential backoff when VT returns 429 (Fix 4)
+    """
     try:
-        from app.orchestrator import orchestrate_threat_intelligence
-    except ImportError:
-        orchestrate_threat_intelligence = None
-    
-    try:
-        # Import within thread context
-        from mongoengine import connect
-        import os
-        
         bulk = BulkScan.objects.get(id=bulk_id)
         user = User.objects.get(id=user_id)
-        
+        cache_cutoff = datetime.utcnow() - timedelta(hours=CACHE_TTL_HOURS)
+
+        from app.vt_shodan_api import vt_lookup_ip, vt_lookup_domain, vt_lookup_url
+        from app.otx_api import otx_lookup
+        from app.ml_model_improved import classify_threat_with_details
+
         for i, ioc in enumerate(iocs):
             try:
                 logger.info(f"[Bulk {bulk_id}] Scanning {i+1}/{len(iocs)}: {ioc[:50]}")
-                
-                # Detect IOC type
                 ioc_type = _detect_type(ioc)
-                
-                # Check if already scanned
-                existing = IOCResult.objects(input_value=ioc, user_id=user).first()
+
+                # ── Fix 2: Global result cache (any user, last 24 h) ──────────
+                existing = IOCResult.objects(
+                    input_value=ioc,
+                    timestamp__gte=cache_cutoff
+                ).order_by('-timestamp').first()
+
                 if existing and existing.classification not in [None, 'Pending', 'Loading...']:
+                    logger.info(f"[Bulk {bulk_id}] Cache hit for {ioc[:40]}")
                     classification = existing.classification
                     result_id = str(existing.id)
+
                 else:
-                    # Run lightweight scan (skip slow APIs for bulk)
-                    from app.vt_shodan_api import vt_lookup_ip, vt_lookup_domain, vt_lookup_url
-                    from app.otx_api import otx_lookup
-                    
+                    # ── Fix 4: VT call with exponential backoff on 429 ────────
                     vt_data = {}
+                    for attempt in range(3):
+                        try:
+                            if ioc_type == 'ip':
+                                vt_data = vt_lookup_ip(ioc) or {}
+                            elif ioc_type == 'domain':
+                                vt_data = vt_lookup_domain(ioc) or {}
+                            elif ioc_type == 'url':
+                                vt_data = vt_lookup_url(ioc) or {}
+                        except Exception as vt_exc:
+                            logger.warning(f"[Bulk {bulk_id}] VT exception: {vt_exc}")
+                            vt_data = {}
+
+                        if vt_data.get('rate_limited'):
+                            wait = 60 * (2 ** attempt)   # 60 s → 120 s → 240 s
+                            logger.warning(
+                                f"[Bulk {bulk_id}] VT 429 on attempt {attempt+1}, "
+                                f"backing off {wait}s…"
+                            )
+                            time.sleep(wait)
+                            vt_data = {}  # reset; will retry
+                        else:
+                            break  # successful call
+
+                    # ── Fix 3: OTX only for small batches ────────────────────
                     otx_data = {}
-                    
-                    try:
-                        if ioc_type == 'ip':
-                            vt_data = vt_lookup_ip(ioc) or {}
-                        elif ioc_type == 'domain':
-                            vt_data = vt_lookup_domain(ioc) or {}
-                        elif ioc_type == 'url':
-                            vt_data = vt_lookup_url(ioc) or {}
-                    except Exception:
-                        pass
-                    
-                    try:
-                        otx_data = otx_lookup(ioc, ioc_type) or {}
-                    except Exception:
-                        pass
-                    
+                    if use_otx:
+                        try:
+                            otx_data = otx_lookup(ioc, ioc_type) or {}
+                        except Exception as otx_exc:
+                            logger.warning(f"[Bulk {bulk_id}] OTX error: {otx_exc}")
+                    else:
+                        logger.debug(f"[Bulk {bulk_id}] OTX skipped (large batch)")
+
                     # Classify
                     try:
-                        from app.ml_model_improved import classify_threat_with_details
-                        classification, details = classify_threat_with_details(
+                        classification, _ = classify_threat_with_details(
                             vt_data=vt_data, otx_data=otx_data,
                             ioc_type=ioc_type, user_input=ioc
                         )
                     except Exception:
                         classification = "Unknown"
-                    
+
                     # Save result
                     ioc_result = IOCResult(
                         input_value=ioc,
@@ -152,13 +199,12 @@ def _run_bulk_scan(bulk_id, iocs, user_id):
                     )
                     ioc_result.save()
                     result_id = str(ioc_result.id)
-                
-                # Update bulk scan progress
+
+                # Update progress
                 bulk.reload()
                 bulk.completed_iocs = i + 1
                 bulk.result_ids.append(result_id)
-                
-                # Update counters
+
                 cls_lower = (classification or '').lower()
                 if 'malicious' in cls_lower:
                     bulk.malicious_count += 1
@@ -170,9 +216,13 @@ def _run_bulk_scan(bulk_id, iocs, user_id):
                     bulk.zero_day_count += 1
                 else:
                     bulk.unknown_count += 1
-                
+
                 bulk.save()
-                
+
+                # ── Fix 1: Rate-limit sleep (skip on last IOC) ───────────────
+                if i < len(iocs) - 1:
+                    time.sleep(ITER_SLEEP)
+
             except Exception as e:
                 logger.error(f"[Bulk {bulk_id}] Error scanning {ioc}: {e}")
                 bulk.reload()
@@ -180,14 +230,17 @@ def _run_bulk_scan(bulk_id, iocs, user_id):
                 bulk.failed_count += 1
                 bulk.errors.append(f"{ioc}: {str(e)[:100]}")
                 bulk.save()
-        
+                # Still respect the rate limit even after an error
+                if i < len(iocs) - 1:
+                    time.sleep(ITER_SLEEP)
+
         # Mark complete
         bulk.reload()
         bulk.status = "completed"
         bulk.completed_at = datetime.utcnow()
         bulk.save()
         logger.info(f"[Bulk {bulk_id}] Completed: {bulk.completed_iocs}/{bulk.total_iocs}")
-        
+
     except Exception as e:
         logger.error(f"[Bulk {bulk_id}] Fatal error: {e}", exc_info=True)
         try:
@@ -414,4 +467,81 @@ def delete_investigation(inv_id):
         inv.delete()
         return jsonify({'status': 'deleted'})
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# INVESTIGATION EXPORT / REPORT ROUTES
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def _fetch_inv_and_scans(inv_id):
+    """Shared helper: fetch investigation + linked scan dicts."""
+    inv = Investigation.objects.get(id=inv_id)
+    linked_scans = []
+    for sid in inv.linked_scan_ids:
+        try:
+            r = IOCResult.objects.get(id=sid)
+            linked_scans.append(r.to_dict())
+        except Exception:
+            pass
+    return inv.to_dict(), linked_scans
+
+
+@bulk_bp.route("/api/investigation/<inv_id>/export/json", methods=["GET"])
+@login_required
+def export_investigation_json(inv_id):
+    """Download investigation as a structured JSON file."""
+    from flask import Response
+    from app.investigation_export import export_json
+    try:
+        inv, linked_scans = _fetch_inv_and_scans(inv_id)
+        data, filename = export_json(inv, linked_scans)
+        return Response(
+            data,
+            mimetype='application/json',
+            headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+        )
+    except Exception as e:
+        logger.error(f"JSON export error: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@bulk_bp.route("/api/investigation/<inv_id>/export/csv", methods=["GET"])
+@login_required
+def export_investigation_csv(inv_id):
+    """Download investigation IOC table as a CSV file."""
+    from flask import Response
+    from app.investigation_export import export_csv
+    try:
+        inv, linked_scans = _fetch_inv_and_scans(inv_id)
+        data, filename = export_csv(inv, linked_scans)
+        return Response(
+            data,
+            mimetype='text/csv',
+            headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+        )
+    except Exception as e:
+        logger.error(f"CSV export error: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@bulk_bp.route("/api/investigation/<inv_id>/export/pdf", methods=["GET"])
+@login_required
+def export_investigation_pdf(inv_id):
+    """Generate and download a styled PDF investigation report."""
+    from flask import Response
+    from app.investigation_export import export_pdf
+    try:
+        inv, linked_scans = _fetch_inv_and_scans(inv_id)
+        data, filename = export_pdf(inv, linked_scans)
+        return Response(
+            data,
+            mimetype='application/pdf',
+            headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+        )
+    except RuntimeError as e:
+        # reportlab not installed
+        return jsonify({'error': str(e)}), 501
+    except Exception as e:
+        logger.error(f"PDF export error: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500

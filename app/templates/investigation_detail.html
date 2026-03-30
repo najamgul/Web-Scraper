@@ -91,7 +91,19 @@
         .btn-note:hover { transform: translateY(-2px); }
         
         .empty-section { text-align: center; padding: 2rem; color: #64748b; font-style: italic; }
-        
+
+        /* Export toolbar */
+        .export-toolbar { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 1.2rem; padding-top: 1.2rem; border-top: 1px solid rgba(255,255,255,0.07); }
+        .export-toolbar-label { font-size: 0.8rem; font-weight: 600; color: #94a3b8; display: flex; align-items: center; margin-right: 0.4rem; }
+        .btn-export { padding: 0.55rem 1.1rem; border-radius: 10px; border: 1px solid; font-size: 0.82rem; font-weight: 700; cursor: pointer; transition: all 0.25s; display: inline-flex; align-items: center; gap: 0.45rem; text-decoration: none; }
+        .btn-export-pdf  { background: rgba(231,76,60,0.1);  color: #e74c3c; border-color: rgba(231,76,60,0.3);  }
+        .btn-export-pdf:hover  { background: rgba(231,76,60,0.22); transform: translateY(-1px); }
+        .btn-export-csv  { background: rgba(46,204,113,0.1); color: #2ecc71; border-color: rgba(46,204,113,0.3); }
+        .btn-export-csv:hover  { background: rgba(46,204,113,0.22); transform: translateY(-1px); }
+        .btn-export-json { background: rgba(76,201,240,0.1); color: #4cc9f0; border-color: rgba(76,201,240,0.3); }
+        .btn-export-json:hover { background: rgba(76,201,240,0.22); transform: translateY(-1px); }
+        .btn-export:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
+
         @media (max-width: 768px) {
             .content-grid { grid-template-columns: 1fr; }
         }
@@ -138,6 +150,20 @@
                     </select>
                 </div>
                 <button class="btn-delete" onclick="deleteInvestigation()"><i class="fas fa-trash-alt"></i> Delete</button>
+            </div>
+
+            <!-- Export toolbar -->
+            <div class="export-toolbar">
+                <span class="export-toolbar-label"><i class="fas fa-download"></i>&nbsp;Export:</span>
+                <button id="btnExportPdf" class="btn-export btn-export-pdf" onclick="exportReport('pdf')">
+                    <i class="fas fa-file-pdf"></i> PDF Report
+                </button>
+                <button id="btnExportCsv" class="btn-export btn-export-csv" onclick="exportReport('csv')">
+                    <i class="fas fa-file-csv"></i> CSV / Excel
+                </button>
+                <button id="btnExportJson" class="btn-export btn-export-json" onclick="exportReport('json')">
+                    <i class="fas fa-file-code"></i> JSON
+                </button>
             </div>
             
             {% if inv.tags %}
@@ -293,6 +319,47 @@
         }).then(r => r.json()).then(() => {
             window.location.href = '{{ url_for("bulk.investigations_list") }}';
         });
+    }
+
+    // ── Export / Report download ──────────────────────────────────────────
+    const exportIcons = {
+        pdf:  'fa-file-pdf',
+        csv:  'fa-file-csv',
+        json: 'fa-file-code'
+    };
+
+    function exportReport(format) {
+        const btnId = `btnExport${format.charAt(0).toUpperCase() + format.slice(1)}`;
+        const btn = document.getElementById(btnId);
+        const origHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Generating...`;
+
+        // Use a hidden anchor to trigger a file download from a GET endpoint
+        const url = `/api/investigation/${invId}/export/${format}`;
+        const a = document.createElement('a');
+        a.href = url;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+
+        // For PDF/CSV we use the browser's native download mechanism.
+        // We do a fetch first just to check for errors before triggering the anchor.
+        fetch(url, { headers: { 'X-CSRFToken': csrfToken } })
+            .then(resp => {
+                if (!resp.ok) {
+                    return resp.json().then(e => { throw new Error(e.error || 'Export failed'); });
+                }
+                // Trigger download by redirecting the hidden anchor
+                a.click();
+            })
+            .catch(err => {
+                alert(`Export failed: ${err.message}`);
+            })
+            .finally(() => {
+                document.body.removeChild(a);
+                btn.disabled = false;
+                btn.innerHTML = origHtml;
+            });
     }
     </script>
 </body>
