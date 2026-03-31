@@ -36,63 +36,155 @@ def _load_model(name, fallback_path=None):
         return joblib.load(fallback_path)
     return None
 
-# Keyword model (TF-IDF + Random Forest)
-model = _load_model("keyword_model.pkl", os.path.join(_here, "..", "rf_model_improved.pkl"))
-vectorizer = _load_model("keyword_vectorizer.pkl", os.path.join(_here, "..", "tfidf_vectorizer.pkl"))
-
-# URL model (Lexical features + XGBoost)
-url_model = _load_model("url_model.pkl")
-url_scaler = _load_model("url_scaler.pkl")
-
-# IP model (API features + XGBoost)
-ip_model = _load_model("ip_model.pkl")
-ip_scaler = _load_model("ip_scaler.pkl")
-
-# Domain model (Structural features + XGBoost)
-domain_model = _load_model("domain_model.pkl")
-domain_scaler = _load_model("domain_scaler.pkl")
-
-# Hash model (API features + XGBoost)
-hash_model = _load_model("hash_model.pkl")
-hash_scaler = _load_model("hash_scaler.pkl")
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# ZERO-DAY ANOMALY DETECTORS (Isolation Forest)
+# LAZY MODEL LOADER — loads models on first use, not at import time.
+# This saves ~220 MB of RAM at startup and prevents memory exhaustion
+# on constrained app-service tiers during bulk scans.
 # ═══════════════════════════════════════════════════════════════════════════════
 
-zd_url_model = _load_model("zeroday_url.pkl")
-zd_url_scaler = _load_model("zeroday_url_scaler.pkl")
+class _LazyModels:
+    """Defer heavy joblib.load() calls until a model is actually needed."""
 
-zd_ip_model = _load_model("zeroday_ip.pkl")
-zd_ip_scaler = _load_model("zeroday_ip_scaler.pkl")
+    _cache = {}
 
-zd_domain_model = _load_model("zeroday_domain.pkl")
-zd_domain_scaler = _load_model("zeroday_domain_scaler.pkl")
+    @classmethod
+    def _get(cls, key, loader):
+        if key not in cls._cache:
+            try:
+                cls._cache[key] = loader()
+                logger.info(f"  Lazy-loaded model: {key}")
+            except Exception as e:
+                logger.warning(f"  Failed to load model {key}: {e}")
+                cls._cache[key] = None
+        return cls._cache[key]
 
-zd_hash_model = _load_model("zeroday_hash.pkl")
-zd_hash_scaler = _load_model("zeroday_hash_scaler.pkl")
+    # ── Classification models ─────────────────────────────────────────────
+    @classmethod
+    def keyword_model(cls):
+        return cls._get('model', lambda: _load_model(
+            "keyword_model.pkl", os.path.join(_here, "..", "rf_model_improved.pkl")))
 
-zd_keyword_model = _load_model("zeroday_keyword.pkl")
-zd_keyword_scaler = _load_model("zeroday_keyword_scaler.pkl")
-zd_keyword_svd = _load_model("zeroday_keyword_svd.pkl")
+    @classmethod
+    def keyword_vectorizer(cls):
+        return cls._get('vectorizer', lambda: _load_model(
+            "keyword_vectorizer.pkl", os.path.join(_here, "..", "tfidf_vectorizer.pkl")))
 
-# Log what loaded
-_loaded = []
-if model and vectorizer: _loaded.append("keyword")
-if url_model and url_scaler: _loaded.append("url")
-if ip_model and ip_scaler: _loaded.append("ip")
-if domain_model and domain_scaler: _loaded.append("domain")
-if hash_model and hash_scaler: _loaded.append("hash")
+    @classmethod
+    def url_model(cls):
+        return cls._get('url_model', lambda: _load_model("url_model.pkl"))
 
-_zd_loaded = []
-if zd_url_model: _zd_loaded.append("url")
-if zd_ip_model: _zd_loaded.append("ip")
-if zd_domain_model: _zd_loaded.append("domain")
-if zd_hash_model: _zd_loaded.append("hash")
-if zd_keyword_model: _zd_loaded.append("keyword")
+    @classmethod
+    def url_scaler(cls):
+        return cls._get('url_scaler', lambda: _load_model("url_scaler.pkl"))
 
-logger.info(f" Loaded ML models: {', '.join(_loaded) if _loaded else 'NONE'}")
-logger.info(f" Loaded Zero-Day detectors: {', '.join(_zd_loaded) if _zd_loaded else 'NONE'}")
+    @classmethod
+    def ip_model(cls):
+        return cls._get('ip_model', lambda: _load_model("ip_model.pkl"))
+
+    @classmethod
+    def ip_scaler(cls):
+        return cls._get('ip_scaler', lambda: _load_model("ip_scaler.pkl"))
+
+    @classmethod
+    def domain_model(cls):
+        return cls._get('domain_model', lambda: _load_model("domain_model.pkl"))
+
+    @classmethod
+    def domain_scaler(cls):
+        return cls._get('domain_scaler', lambda: _load_model("domain_scaler.pkl"))
+
+    @classmethod
+    def hash_model(cls):
+        return cls._get('hash_model', lambda: _load_model("hash_model.pkl"))
+
+    @classmethod
+    def hash_scaler(cls):
+        return cls._get('hash_scaler', lambda: _load_model("hash_scaler.pkl"))
+
+    # ── Zero-day anomaly detectors ────────────────────────────────────────
+    @classmethod
+    def zd_url_model(cls):
+        return cls._get('zd_url_model', lambda: _load_model("zeroday_url.pkl"))
+
+    @classmethod
+    def zd_url_scaler(cls):
+        return cls._get('zd_url_scaler', lambda: _load_model("zeroday_url_scaler.pkl"))
+
+    @classmethod
+    def zd_ip_model(cls):
+        return cls._get('zd_ip_model', lambda: _load_model("zeroday_ip.pkl"))
+
+    @classmethod
+    def zd_ip_scaler(cls):
+        return cls._get('zd_ip_scaler', lambda: _load_model("zeroday_ip_scaler.pkl"))
+
+    @classmethod
+    def zd_domain_model(cls):
+        return cls._get('zd_domain_model', lambda: _load_model("zeroday_domain.pkl"))
+
+    @classmethod
+    def zd_domain_scaler(cls):
+        return cls._get('zd_domain_scaler', lambda: _load_model("zeroday_domain_scaler.pkl"))
+
+    @classmethod
+    def zd_hash_model(cls):
+        return cls._get('zd_hash_model', lambda: _load_model("zeroday_hash.pkl"))
+
+    @classmethod
+    def zd_hash_scaler(cls):
+        return cls._get('zd_hash_scaler', lambda: _load_model("zeroday_hash_scaler.pkl"))
+
+    @classmethod
+    def zd_keyword_model(cls):
+        return cls._get('zd_keyword_model', lambda: _load_model("zeroday_keyword.pkl"))
+
+    @classmethod
+    def zd_keyword_scaler(cls):
+        return cls._get('zd_keyword_scaler', lambda: _load_model("zeroday_keyword_scaler.pkl"))
+
+    @classmethod
+    def zd_keyword_svd(cls):
+        return cls._get('zd_keyword_svd', lambda: _load_model("zeroday_keyword_svd.pkl"))
+
+
+# Backward-compatible module-level aliases (lazy — no memory used until accessed)
+class _LazyProxy:
+    """Descriptor that calls the _LazyModels loader on first attribute access."""
+    def __init__(self, loader_name):
+        self._loader = getattr(_LazyModels, loader_name)
+    def __bool__(self):
+        return self._loader() is not None
+    def __getattr__(self, name):
+        obj = self._loader()
+        if obj is None:
+            raise AttributeError(f"Model not loaded")
+        return getattr(obj, name)
+
+model      = _LazyProxy('keyword_model')
+vectorizer = _LazyProxy('keyword_vectorizer')
+url_model  = _LazyProxy('url_model')
+url_scaler = _LazyProxy('url_scaler')
+ip_model   = _LazyProxy('ip_model')
+ip_scaler  = _LazyProxy('ip_scaler')
+domain_model  = _LazyProxy('domain_model')
+domain_scaler = _LazyProxy('domain_scaler')
+hash_model  = _LazyProxy('hash_model')
+hash_scaler = _LazyProxy('hash_scaler')
+zd_url_model    = _LazyProxy('zd_url_model')
+zd_url_scaler   = _LazyProxy('zd_url_scaler')
+zd_ip_model     = _LazyProxy('zd_ip_model')
+zd_ip_scaler    = _LazyProxy('zd_ip_scaler')
+zd_domain_model  = _LazyProxy('zd_domain_model')
+zd_domain_scaler = _LazyProxy('zd_domain_scaler')
+zd_hash_model    = _LazyProxy('zd_hash_model')
+zd_hash_scaler   = _LazyProxy('zd_hash_scaler')
+zd_keyword_model  = _LazyProxy('zd_keyword_model')
+zd_keyword_scaler = _LazyProxy('zd_keyword_scaler')
+zd_keyword_svd    = _LazyProxy('zd_keyword_svd')
+
+logger.info("  ML models configured for LAZY loading (loaded on first use)")
+
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -499,7 +591,7 @@ def classify_threat_improved(vt_data=None, shodan_data=None, otx_data=None,
             logger.info(f" VT: {api_scores['vt_score']:.1f}, OTX: {api_scores['otx_score']:.1f}, Shodan: {api_scores['shodan_score']:.1f}, AbuseIPDB: {api_scores['abuseipdb_score']:.1f}")
             
             # Use TF-IDF + ML model for keywords if available
-            if model is not None and vectorizer is not None:
+            if model and vectorizer:
                 try:
                     # Transform text using TF-IDF
                     X_text = vectorizer.transform([user_input])
@@ -583,22 +675,22 @@ def classify_threat_improved(vt_data=None, shodan_data=None, otx_data=None,
         # Select the correct IOC-specific model
         ioc_model, ioc_scaler, features = None, None, None
 
-        if ioc_type == 'url' and url_model is not None:
+        if ioc_type == 'url' and url_model:
             ioc_model, ioc_scaler = url_model, url_scaler
             features = extract_url_features(user_input)
             logger.info(f" Using URL ML model (20 lexical features)")
 
-        elif ioc_type == 'ip' and ip_model is not None:
+        elif ioc_type == 'ip' and ip_model:
             ioc_model, ioc_scaler = ip_model, ip_scaler
             features = extract_ip_api_features(vt_data, shodan_data, otx_data, abuseipdb_data)
             logger.info(f" Using IP ML model (11 API features)")
 
-        elif ioc_type == 'domain' and domain_model is not None:
+        elif ioc_type == 'domain' and domain_model:
             ioc_model, ioc_scaler = domain_model, domain_scaler
             features = extract_domain_features(user_input)
             logger.info(f" Using Domain ML model (14 structural features)")
 
-        elif ioc_type == 'hash' and hash_model is not None:
+        elif ioc_type == 'hash' and hash_model:
             ioc_model, ioc_scaler = hash_model, hash_scaler
             features = extract_hash_api_features(vt_data, otx_data)
             logger.info(f" Using Hash ML model (9 API features)")
@@ -614,10 +706,10 @@ def classify_threat_improved(vt_data=None, shodan_data=None, otx_data=None,
                 'hash': (zd_hash_model, zd_hash_scaler),
             }
             zd_m, zd_s = zd_model_map.get(ioc_type, (None, None))
-            if zd_m is not None:
+            if zd_m:
                 try:
                     X_zd = np.array([features], dtype=np.float32)
-                    if zd_s is not None:
+                    if zd_s:
                         X_zd = zd_s.transform(X_zd)
                     anomaly_pred = zd_m.predict(X_zd)[0]  # 1=normal, -1=anomaly
                     anomaly_score = zd_m.decision_function(X_zd)[0]  # lower = more anomalous
@@ -632,10 +724,10 @@ def classify_threat_improved(vt_data=None, shodan_data=None, otx_data=None,
                     logger.warning(f" Zero-day check error: {e}")
 
         # Run IOC-specific ML model if available
-        if ioc_model is not None and features is not None:
+        if ioc_model and features is not None:
             try:
                 X = np.array([features], dtype=np.float32)
-                if ioc_scaler is not None:
+                if ioc_scaler:
                     X = ioc_scaler.transform(X)
 
                 proba = ioc_model.predict_proba(X)[0]

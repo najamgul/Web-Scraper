@@ -3,6 +3,7 @@
 import logging
 import threading
 import time
+import gc
 from datetime import datetime, timedelta
 from flask import Blueprint, render_template, request, jsonify, session, redirect, url_for, flash
 from app.models import User, IOCResult, BulkScan, Investigation, InvestigationNote
@@ -24,7 +25,7 @@ ITER_SLEEP         = VT_RATE_DELAY  # dominant delay per IOC
 OTX_BATCH_THRESHOLD = 50         # if batch > this, OTX is skipped
 
 # Fix 5 – safe batch cap that avoids instant rate-limit exhaustion
-MAX_IOCS_PER_BATCH = 100
+MAX_IOCS_PER_BATCH = 50
 
 # Fix 2 – how long a cached result is considered fresh
 CACHE_TTL_HOURS = 24
@@ -219,6 +220,11 @@ def _run_bulk_scan(bulk_id, iocs, user_id, use_otx=True):
 
                 bulk.save()
 
+                # Free API response memory between IOCs
+                vt_data = None
+                otx_data = None
+                gc.collect()
+
                 # ── Fix 1: Rate-limit sleep (skip on last IOC) ───────────────
                 if i < len(iocs) - 1:
                     time.sleep(ITER_SLEEP)
@@ -230,6 +236,7 @@ def _run_bulk_scan(bulk_id, iocs, user_id, use_otx=True):
                 bulk.failed_count += 1
                 bulk.errors.append(f"{ioc}: {str(e)[:100]}")
                 bulk.save()
+                gc.collect()
                 # Still respect the rate limit even after an error
                 if i < len(iocs) - 1:
                     time.sleep(ITER_SLEEP)
